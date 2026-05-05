@@ -1,0 +1,20 @@
+{
+  "grind_collide": {
+    "subtitle": "subtitles.createrailgrinding.grind_collide",
+    "sounds": [
+      "createrailgrinding:grind_collide"
+    ]
+  },
+  "grind_fast_loop": {
+    "subtitle": "subtitles.createrailgrinding.grind_fast_loop",
+    "sounds": [
+      "createrailgrinding:grind_fast_loop"
+    ]
+  },
+  "grind_slow_loop": {
+    "subtitle": "subtitles.createrailgrinding.grind_slow_loop",
+    "sounds": [
+      "createrailgrinding:grind_slow_loop"
+    ]
+  }
+}

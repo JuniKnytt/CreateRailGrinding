@@ -1,0 +1,3 @@
+Drop .ogg files here. Each file referenced by sounds.json must exist as
+assets/createrailgrinding/sounds/<name>.ogg (the "createrailgrinding:<name>"
+entry in sounds.json maps to this path).

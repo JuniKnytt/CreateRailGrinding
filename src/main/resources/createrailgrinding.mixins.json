@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "package": "net.juniknytt.createrailgrinding.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "minVersion": "0.8",
+  "mixins": [
+    "PlayerEdgeMixin"
+  ],
+  "client": [
+    "client.PlayerModelMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
