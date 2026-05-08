@@ -7,10 +7,12 @@ import com.simibubi.create.content.trains.track.TrackBlockOutline;
 import com.simibubi.create.content.trains.track.TrackBlockOutline.BezierPointSelection;
 import com.simibubi.create.content.trains.track.TrackMaterial;
 import net.juniknytt.createrailgrinding.RailGrind;
+import net.juniknytt.createrailgrinding.client.BalancingPoseTracker;
 import net.juniknytt.createrailgrinding.network.Networking;
 import net.juniknytt.createrailgrinding.network.StartGrindFromNearestPayload;
 import net.juniknytt.createrailgrinding.network.SteerInputPayload;
 import net.juniknytt.createrailgrinding.network.StopGrindPayload;
+import net.juniknytt.createrailgrinding.sound.GrindSoundController;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.Input;
 import net.minecraft.client.player.LocalPlayer;
@@ -74,19 +76,82 @@ public class ClientInputHandler {
         return null;
     }
 
+    /**
+     * Game-time tick at which the local player pressed jump while grinding, or -1 when not
+     * currently charging. Set on jump-press while balancing, cleared on jump-release (after
+     * sending the held-duration to the server) and on any non-jump grind exit (the per-tick
+     * reset handler in onClientTickResetCharge). Read by the JumpChargeOverlay each frame to
+     * compute the live bar fill, and on release to compute the held-tick count sent in
+     * {@link StopGrindPayload}. We capture an absolute game tick rather than a counter so the
+     * ratio is independent of frame-rate variance and renders consistently across partial-tick
+     * frames.
+     */
+    private static long chargeStartGameTime = -1L;
+
+    /** True while the local player is mid-jump-charge for a railgrind dismount. */
+    public static boolean isCharging() {
+        return chargeStartGameTime >= 0L;
+    }
+
+    /**
+     * Live held-tick count for the in-progress charge, or -1 when not charging. Saturates at
+     * Integer.MAX_VALUE rather than wrapping if the player somehow holds jump for billions of
+     * ticks; the server clamps to JUMP_TRICK_CHARGE_INPUT_TIME_MAX anyway, so the only consumer
+     * that sees the raw count is the overlay (which feeds it through the same clamping).
+     */
+    public static int getChargeHeldTicks() {
+        if (chargeStartGameTime < 0L) return -1;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return -1;
+        long held = mc.level.getGameTime() - chargeStartGameTime;
+        if (held < 0L) return 0;
+        return held > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) held;
+    }
+
     @SubscribeEvent
     public static void onKey(InputEvent.Key event) {
         // Mid-grind dismount only. The alternate jump+sneak start trigger lives in
         // onClientTick, since it needs to keep polling while both keys are held —
         // a single key-press event would only fire once.
-        if (event.getAction() != InputConstants.PRESS) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen != null) return;
         LocalPlayer player = mc.player;
         if (player == null) return;
         if (event.getKey() != mc.options.keyJump.getKey().getValue()) return;
-        if (!BalancingPoseTracker.isBalancing(player)) return;
-        PacketDistributor.sendToServer(StopGrindPayload.INSTANCE);
+
+        if (event.getAction() == InputConstants.PRESS) {
+            // Edge-trigger: only start charging on a fresh press while balancing. If the player
+            // started a grind via the jump+sneak polling trigger with jump already down, no
+            // PRESS event fires mid-grind, so the charge bar stays hidden until they release
+            // and re-press jump. That matches the prior dismount-on-PRESS semantics — the
+            // user has to deliberately press jump to commit to a dismount.
+            if (!BalancingPoseTracker.isBalancing(player)) return;
+            if (mc.level == null) return;
+            chargeStartGameTime = mc.level.getGameTime();
+        } else if (event.getAction() == InputConstants.RELEASE) {
+            if (chargeStartGameTime < 0L) return;
+            int held = getChargeHeldTicks();
+            chargeStartGameTime = -1L;
+            // Always send the dismount packet on release of a charge in progress, even if the
+            // player has somehow stopped balancing in the interim — the server's stopWithLaunch
+            // is a no-op in that case (ACTIVE.get returns null → falls through to plain stop()).
+            PacketDistributor.sendToServer(new StopGrindPayload(Math.max(0, held)));
+        }
+    }
+
+    /**
+     * Cancels an in-progress charge if the grind ends for any reason other than jump release
+     * (server kicks the player off, takes damage, runs off the end of the rail). Without this,
+     * a left-over chargeStartGameTime would keep the overlay rendering and queue a stale
+     * dismount packet on the next jump release.
+     */
+    @SubscribeEvent
+    public static void onClientTickResetCharge(ClientTickEvent.Post event) {
+        if (chargeStartGameTime < 0L) return;
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player == null || !BalancingPoseTracker.isBalancing(player)) {
+            chargeStartGameTime = -1L;
+        }
     }
 
     /**
@@ -111,7 +176,6 @@ public class ClientInputHandler {
         if (BalancingPoseTracker.isBalancing(player)) return;
         if (!mc.options.keyJump.isDown()) return;
         if (!mc.options.keyShift.isDown()) return;
-        if (player.getMainHandItem().getItem() != Items.AIR) return;
         if (!(player.getItemBySlot(EquipmentSlot.FEET).getItem() instanceof DivingBootsItem)) return;
         PacketDistributor.sendToServer(StartGrindFromNearestPayload.INSTANCE);
     }
@@ -185,7 +249,9 @@ public class ClientInputHandler {
 
     private static void clearClientGrindState(LocalPlayer player) {
         BalancingPoseTracker.clear();
+        GrindSoundController.clearAll();
         lastSentSteer = 0;
+        chargeStartGameTime = -1L;
         if (player != null) {
             player.noPhysics = false;
         }

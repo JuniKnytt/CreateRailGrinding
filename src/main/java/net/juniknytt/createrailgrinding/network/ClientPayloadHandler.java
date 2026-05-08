@@ -19,10 +19,12 @@ public final class ClientPayloadHandler {
             if (player == null) return;
             player.noPhysics = payload.grinding();
 
-            // One-shot grind-start sound — fires only when *we* started grinding,
-            // not when a remote player did.
-            if (payload.grinding() && player == mc.player) {
-                GrindSoundController.playCollide();
+            // One-shot grind-start sound. Plays for any grinding player visible to this
+            // client; playCollide routes through level.playLocalSound so the sound engine
+            // attenuates remote starts by distance and the local player's start stays
+            // full-volume because their listener position equals the sound origin.
+            if (payload.grinding()) {
+                GrindSoundController.playCollide(player);
             }
         });
     }

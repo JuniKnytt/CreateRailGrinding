@@ -22,13 +22,13 @@ import java.util.Locale;
  * (no client-side sync packet for grind state).
  */
 @EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
-public final class RailGrindDebugSpeed {
+public final class RailGrindDebugHud {
     private static final int X_PAD = 4;
     private static final int Y_PAD = 4;
     private static final int LINE_HEIGHT = 10;
     private static final int COLOR = 0xFFFFFFFF;
 
-    private RailGrindDebugSpeed() {}
+    private RailGrindDebugHud() {}
 
     @SubscribeEvent
     public static void onRenderGui(RenderGuiEvent.Post event) {
@@ -74,9 +74,13 @@ public final class RailGrindDebugSpeed {
         // (count > 0 ↔ overlap this tick) since tickTrainOverlap removes the entry on
         // the first miss.
         int overlapTicks = RailGrindHandler.getTrainOverlapTicks(player);
+        int fallImmunityTicks = RailGrindHandler.getFallImmunityRemaining(player);
+        int startCooldownTicks = RailGrindHandler.getStartCooldownRemaining(player);
         String[] overlapLines = {
             String.format(Locale.ROOT, "intersectingTrainAABB: %b", overlapTicks > 0),
             String.format(Locale.ROOT, "trainOverlapTicks: %d", overlapTicks),
+            String.format(Locale.ROOT, "fallImmunityTicks: %d", fallImmunityTicks),
+            String.format(Locale.ROOT, "RailGrindCooldownTicks: %d", startCooldownTicks),
         };
         for (String line : overlapLines) {
             graphics.drawString(font, line, X_PAD, y, COLOR, true);

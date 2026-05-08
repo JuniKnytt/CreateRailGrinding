@@ -7,6 +7,7 @@ import net.createmod.catnip.animation.LerpedFloat.Chaser;
 import net.createmod.catnip.math.AngleHelper;
 import net.createmod.catnip.placement.PlacementClient;
 import net.juniknytt.createrailgrinding.RailGrind;
+import net.juniknytt.createrailgrinding.client.BalancingPoseTracker;
 import net.juniknytt.createrailgrinding.rail.RailGrindHandler;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
@@ -84,7 +85,7 @@ public final class GrindSpeedometerOverlay {
 
         if (grinding) {
             double speedMs = player.getDeltaMovement().length() * 20.0;
-            double topSpeedMs = RailGrindHandler.TOP_SPEED * 20.0;
+            double topSpeedMs = RailGrindHandler.topSpeed() * 20.0;
             // +0.05 padding (lifted from Create's TrainHUD) so a tiny non-zero speed still lights a segment.
             double value = Mth.clamp(speedMs / topSpeedMs + 0.05, 0.0, 1.0);
             double snapped = (int) (value * BAR_SEGMENTS) / (double) BAR_SEGMENTS;

@@ -3,7 +3,6 @@ package net.juniknytt.createrailgrinding;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.world.item.*;
-import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import org.slf4j.Logger;
 
@@ -88,6 +87,7 @@ public class RailGrind {
     public RailGrind(IEventBus modBus, ModContainer container) {
         net.juniknytt.createrailgrinding.sound.ModSounds.register(modBus);
         container.registerConfig(ModConfig.Type.CLIENT, Config.SPEC);
+        container.registerConfig(ModConfig.Type.SERVER, Config.SERVER_SPEC);
     }
 
     // You can use SubscribeEvent and let the Event Bus discover methods to call

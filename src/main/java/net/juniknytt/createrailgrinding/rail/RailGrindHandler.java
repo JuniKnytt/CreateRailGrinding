@@ -1,11 +1,7 @@
 package net.juniknytt.createrailgrinding.rail;
 
 import com.simibubi.create.Create;
-import com.simibubi.create.content.trains.entity.Carriage;
-import com.simibubi.create.content.trains.entity.CarriageBogey;
 import com.simibubi.create.content.trains.entity.CarriageContraptionEntity;
-import com.simibubi.create.content.trains.entity.Train;
-import com.simibubi.create.content.trains.entity.TravellingPoint;
 import com.simibubi.create.content.trains.graph.TrackEdge;
 import com.simibubi.create.content.trains.graph.TrackGraph;
 import com.simibubi.create.content.trains.graph.TrackGraphHelper;
@@ -17,28 +13,23 @@ import com.simibubi.create.content.trains.track.ITrackBlock;
 import com.simibubi.create.content.trains.track.TrackBlockEntity;
 import com.simibubi.create.content.trains.track.TrackMaterial;
 import net.createmod.catnip.data.Couple;
+import net.juniknytt.createrailgrinding.Config;
 import net.juniknytt.createrailgrinding.RailGrind;
 import net.juniknytt.createrailgrinding.client.BalancingPoseTracker;
 import net.juniknytt.createrailgrinding.network.RailGrindSyncPayload;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.SectionPos;
-import net.minecraft.core.Holder;
 import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.damagesource.DamageSource;
-import net.minecraft.world.damagesource.DamageType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.joml.Vector3f;
@@ -49,21 +40,12 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class RailGrindHandler {
-    // Train-collision damage type — used when the grinding cube overlaps a carriage AABB.
-    // See data/createrailgrinding/damage_type/flattened.json and the death.attack.flattened
-    // lang key. Looked up from the server level's registry on each hit because DamageType is
-    // dynamic-registry-only (no static Holder). Public so ModEvents.onIncomingDamageStopGrind
-    // can detect already-calibrated train-collision damage and skip its blanket speed×10
-    // multiplier.
-    public  static final ResourceKey<DamageType> FLATTENED_DAMAGE = ResourceKey.create(
-        Registries.DAMAGE_TYPE,
-        ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "flattened"));
     private static final Map<UUID, GrindState> ACTIVE = new ConcurrentHashMap<>();
-    // game-tick at which post-dismount fall-damage immunity expires, per player UUID. Populated
+    // Game-tick at which post-dismount fall-damage immunity expires, per player UUID. Populated
     // by stop(), drained lazily by hasFallImmunity(). Server-side only — every stop() caller
     // (PlayerTickEvent.Post, network packet handlers, login/logout/respawn) runs on the server.
-    private static final Map<UUID, Long> FALL_IMMUNITY_UNTIL = new ConcurrentHashMap<>();
-    private static final int FALL_IMMUNITY_TICKS = 40;                    // 2 s — covers the landing arc after a stopWithLaunch dismount and the drop after stepping off an elevated rail
+    private static final Map<UUID, Long> FALL_DAMAGE_IMMUNITY_TIME = new ConcurrentHashMap<>();
+    private static final int FALL_IMMUNITY_TICKS = 25;                    // 1.25 s — short window covering the landing arc after a stopWithLaunch dismount and the immediate drop after stepping off an elevated rail. Kept brief so a player who deliberately keeps falling after the window won't escape fall damage.
     // Remaining cooldown ticks before another grind can begin, per player UUID. Set to
     // START_COOLDOWN_TICKS by stop() (every grind exit), decremented once per server tick
     // by tickCooldown() (called from ModEvents.onPlayerTick), evicted when it hits 0.
@@ -85,13 +67,24 @@ public final class RailGrindHandler {
     // signal — the HUD's intersect bool is just count > 0, no separate boolean needed.
     private static final Map<UUID, Integer> TRAIN_OVERLAP_TICKS = new ConcurrentHashMap<>();
     private static final int TRAIN_OVERLAP_KICK_TICKS = 5;                // 0.25 s — kick threshold. Brief enough that getting run over by a train terminates the grind well before drag/desync sets in, while still tolerating the 1–2 ticks of overlap the AABB lookup can pick up at the start or tail of a fast pass-through.
-    public  static final double TOP_SPEED = 0.84;                         // shift held — 3× vanilla sprint (~16.8 m/s) — referenced by the client speedometer overlay to normalize the fill ratio
-    private static final double CRUISE_SPEED = 0.13;                      // shift released — vanilla sprint pace
+    // Top grind speed (shift held — ~3× vanilla sprint at the default 0.84). Sourced from
+    // Config.TOP_GRIND_SPEED so server admins can retune without recompiling. Wrapped in a
+    // method (instead of a static final) so the speedometer overlay and sound controller pick
+    // up live config changes via the same accessor. SERVER spec syncs from a dedicated server
+    // during the configuration phase; client-side callers (HUD overlays) can hit this before
+    // the sync packet lands, so fall back to the spec default until it's loaded.
+    public static double topSpeed() {
+        return Config.SERVER_SPEC.isLoaded()
+                ? Config.TOP_GRIND_SPEED.get()
+                : Config.TOP_GRIND_SPEED.getDefault();
+    }
+    private static final double CRUISE_SPEED = 0.20;
     private static final double ACCELERATION = 0.005;                     // ~0.005/tick — momentum feel: 0→CRUISE ≈ 1.3 s, 0→TOP (unboosted) ≈ 8.4 s
-    private static final double BOOST_ACCEL_MULT = 2.0;                   // shift → accel × 2 (CRUISE → TOP boosted ≈ 3.5 s)
     private static final double DOWNHILL_FACTOR = 0.9;                    // top speed × (1 + |slope| · 0.9) on descents
     private static final double UPHILL_FACTOR = 1.5;                      // top speed × (1 − slope · 1.5) on ascents — steep up gets noticeably slow
-    private static final double DOWNHILL_ACCEL_BOOST = 2.0;               // accel up to 2× on the steepest descents (gentler than before)
+    private static final double DOWNHILL_CRUISE_MIN_FRACTION = 0.75;      // un-sneaked descent target floor: at a gentle downward slope, target = 75% topSpeed. Lifts the no-shift coast well above CRUISE_SPEED so gravity carries the player meaningfully even without holding shift.
+    private static final double DOWNHILL_CRUISE_MAX_FRACTION = 1.00;      // un-sneaked descent target ceiling: at a max downward slope, target = 100% topSpeed. Sneaked top can still exceed this via DOWNHILL_FACTOR, so shift remains the way to push past cruise.
+    private static final double DOWNHILL_ACCEL_BOOST = 5.0;               // accel up to 5× on the steepest descents — gives downhill grinding a sneak-tier kick. The slope-based bonus is further scaled by Config.DOWNWARD_MOMENTUM_GAIN (0.1–2.0) for server-side tuning.
     private static final double CURVE_FACTOR = 0.75;                      // bezier turns trim 25%
     private static final double MIN_SPEED = 0.10;                         // floor at walking pace (~2 m/s) on steep climbs
     private static final double Y_OFFSET = 0.5;                           // vertical hover above rail line (collision bypassed by noPhysics)
@@ -109,15 +102,24 @@ public final class RailGrindHandler {
     private static final double STUCK_VELOCITY_THRESHOLD = 0.05;          // per-tick displacement (blocks) below which the player counts as "not moving" — well under MIN_SPEED so legitimate steep-climb grinding never trips it
     private static final int STUCK_DROP_TICKS = 3;                        // 3 consecutive stuck ticks (after grace) → drop from grind
     private static final int STUCK_GRACE_TICKS = 8;                       // first 0.4 s of grind: ignore stuck (let noPhysics sync to client)
-    private static final double BOGEY_AABB_INFLATE = 0.5;                 // inflation applied to each bogey's AABB before intersecting against the player hitbox. The two axle TravellingPoints define only a line; bogeys also have a wheel-gauge width and a frame reaching up to the carriage floor — half a block of inflation rounds the line out to roughly the right physical volume without spilling far past the bogey body.
-    private static final double TRAIN_SEARCH_PADDING = 8.0;               // pad applied to the player's hitbox before getEntitiesOfClass(CarriageContraptionEntity.class, …). Covers Train.maxSpeed (~0.4 b/t) for several ticks of approach so a fast oncoming carriage can't enter the player's space between checks.
     private static final double LAUNCH_HORIZONTAL_MULT = 2.0;             // jump-off horizontal velocity = currentSpeed × this. >1 so dismount feels like a launch rather than coasting.
     private static final double LAUNCH_VERTICAL_BASE = 0.42;              // vanilla jump strength — minimum upward kick on jump-off, even at MIN_SPEED.
     private static final double LAUNCH_VERTICAL_SCALE = 0.6;              // extra vertical velocity per unit of currentSpeed. At TOP_SPEED this stacks ~0.5 on top of the base for ≈ 9-block launches.
-    // Speed-tier dust tints for rail-grinding sparks.
-    private static final DustParticleOptions WHITE_SPARK  = new DustParticleOptions(new Vector3f(1.0f, 1.0f, 1.0f), 1.0f);
-    private static final DustParticleOptions YELLOW_SPARK = new DustParticleOptions(new Vector3f(1.0f, 1.0f, 0.0f), 1.0f);
-    private static final DustParticleOptions RED_SPARK    = new DustParticleOptions(new Vector3f(1.0f, 0.0f, 0.0f), 1.0f);
+    // Jump-trick charge window. The client tracks how long the jump key was held while
+    // grinding before release and sends the count in StopGrindPayload; the server clamps
+    // here and turns it into a 0..1 ratio via computeChargeRatio. _MIN at 0 means even an
+    // instant tap still produces the existing speed-based launch (ratio 0 = no charge boost),
+    // _MAX at 40 (~2 s) is the cap past which holding longer doesn't add anything.
+    public  static final int JUMP_TRICK_CHARGE_INPUT_TIME_MIN = 0;
+    public  static final int JUMP_TRICK_CHARGE_INPUT_TIME_MAX = 20;
+    // Charge multipliers stack on top of the speed-based launch. At ratio 1.0 (full charge)
+    // each component is doubled — so a TOP_SPEED full-charge dismount horizontally launches at
+    // ≈ 3.36 (vs. 1.68 uncharged) and adds ≈ 1.85 vertical (vs. 0.92 uncharged). Pure additive
+    // bonus on the existing formula keeps the speed-only behavior identical at ratio 0.
+    private static final double LAUNCH_CHARGE_HORIZONTAL_BONUS_MULT = 1.0;
+    private static final double LAUNCH_CHARGE_VERTICAL_BONUS_MULT   = 1.0;
+    // Rail-grind sparks: base crit particle (spark-shaped) plus a red dust tint layered on at high speed.
+    private static final DustParticleOptions RED_SPARK = new DustParticleOptions(new Vector3f(1.0f, 0.0f, 0.0f), 1.0f);
 
     private RailGrindHandler() {}
 
@@ -134,8 +136,8 @@ public final class RailGrindHandler {
         double experiencedSlope;  // motion.y / motion.length() from last tick (sin of pitch); +up / -down
         double lateralSign;  // +1 or -1, fixed for the grind: which rail bar the player is riding on. Picked at init from prePos.
         Vec3 expectedPos;    // where the player *should* be after last tick's velocity was applied — used as the velocity reference instead of player.position(), which lags the client by 1+ ticks and accumulates chord-cut drift on parallel curves.
-        boolean collidingWithTrain; // set by checkTrainCollision each tick: true if the player's hitbox AABB intersects any bogey's AABB. Surfaced via GrindDebugInfo for the debug HUD; also gates whether train-collision damage is applied (after a relSpeed threshold).
         int steerSign;       // -1 = left, 0 = none, +1 = right. Synced from the local player via SteerInputPayload (sent only when the value flips). advanceJunction reads this as targetDot for the same lateral-projection algorithm Create's TravellingPoint.steer uses on player-controlled trains.
+        boolean collidingWithTrain;  // set by tickTrainOverlap each server tick: true iff the player's bounding box intersects any CarriageContraptionEntity's bounding box this tick. Surfaced via GrindDebugInfo for the debug HUD; the same per-tick overlap also feeds the TRAIN_OVERLAP_TICKS counter that drives the kick / start-prevention gates.
 
         GrindState(TrackGraph graph, TrackNode fromNode, TrackNode toNode, TrackEdge edge, double position) {
             this.graph = graph;
@@ -143,7 +145,7 @@ public final class RailGrindHandler {
             this.toNode = toNode;
             this.edge = edge;
             this.position = position;
-            this.currentSpeed = CRUISE_SPEED;  // launch at sprint pace, not from a dead stop
+            this.currentSpeed = CRUISE_SPEED * Config.CRUISE_GRIND_SPEED.get();  // launch at sprint pace, not from a dead stop
             this.lateralSign = 1.0;            // overwritten by railgrinding once prePos is known
         }
     }
@@ -288,7 +290,7 @@ public final class RailGrindHandler {
         if (ACTIVE.remove(player.getUUID()) == null) return;
         player.setNoGravity(false);
         player.noPhysics = false;
-        FALL_IMMUNITY_UNTIL.put(player.getUUID(), player.level().getGameTime() + FALL_IMMUNITY_TICKS);
+        FALL_DAMAGE_IMMUNITY_TIME.put(player.getUUID(), player.level().getGameTime() + FALL_IMMUNITY_TICKS);
         // Stamp the post-grind cooldown. Decremented every server tick by tickCooldown();
         // blocks Networking.handleTeleport (no teleport-onto-rail) and railgrinding() (no
         // grind start) while the counter is > 0.
@@ -297,19 +299,36 @@ public final class RailGrindHandler {
     }
 
     /**
-     * True for FALL_IMMUNITY_TICKS after the most recent grind exit. ModEvents uses this to
-     * cancel fall damage so dismounts off elevated rails — and the landing arc from a
-     * stopWithLaunch — don't immediately kill the player. Map entries self-evict on the first
-     * read past the expiry tick.
+     * True for {@link #FALL_IMMUNITY_TICKS} after the most recent grind exit. ModEvents reads
+     * this to cancel fall damage during the window so a launch arc or a step off an elevated
+     * rail doesn't kill the player. Map entries self-evict on the first read past the expiry
+     * tick.
+     *
+     * This is more optimized for in-game use.
      */
     public static boolean hasFallImmunity(Player player) {
-        Long until = FALL_IMMUNITY_UNTIL.get(player.getUUID());
-        if (until == null) return false;
-        if (player.level().getGameTime() >= until) {
-            FALL_IMMUNITY_UNTIL.remove(player.getUUID());
+        Long time = FALL_DAMAGE_IMMUNITY_TIME.get(player.getUUID());
+        if (time == null) return false;
+        if (player.level().getGameTime() >= time) {
+            FALL_DAMAGE_IMMUNITY_TIME.remove(player.getUUID());
             return false;
         }
         return true;
+    }
+
+    /**
+     * Remaining ticks of post-dismount fall-damage immunity for this player, or 0 if the
+     * window has already expired (or never started). Debug-only accessor used by the HUD;
+     * gameplay code should use {@link #hasFallImmunity(Player)} instead so the boolean gate
+     * stays the canonical contract.
+     *
+     * This exists to make debugging easier, shows up in debug hud.
+     */
+    public static int getFallImmunityRemaining(Player player) {
+        Long time = FALL_DAMAGE_IMMUNITY_TIME.get(player.getUUID());
+        if (time == null) return 0;
+        long remaining = time - player.level().getGameTime();
+        return remaining > 0 ? (int) remaining : 0;
     }
 
     /**
@@ -324,6 +343,19 @@ public final class RailGrindHandler {
     public static boolean isPlayerOnRailGrindCooldown(Player player) {
         Integer remaining = START_COOLDOWN_REMAINING.get(player.getUUID());
         return remaining != null && remaining > 0;
+    }
+
+    /**
+     * Remaining ticks of post-dismount start cooldown for this player, or 0 if the cooldown
+     * has already lapsed. Debug-only accessor used by the HUD; gameplay code should use
+     * {@link #isPlayerOnRailGrindCooldown(Player)} instead so the boolean gate stays the
+     * canonical contract.
+     *
+     * Used for Debugging
+     */
+    public static int getStartCooldownRemaining(Player player) {
+        Integer remaining = START_COOLDOWN_REMAINING.get(player.getUUID());
+        return remaining == null ? 0 : remaining;
     }
 
     /**
@@ -345,11 +377,11 @@ public final class RailGrindHandler {
     }
 
     /**
-     * Tick the train-overlap crush counter: increment while the player's hitbox intersects
-     * any {@link CarriageContraptionEntity}'s bounding box, reset to 0 the first tick the
-     * intersection clears. The hard reset (rather than a slow decay) ensures a series of
-     * momentary brush-bys can never accumulate into a kick — only one continuous overlap
-     * counts toward the threshold.
+     * Tick the train-overlap crush counter: increment while the player's bounding box
+     * intersects any {@link CarriageContraptionEntity}'s bounding box, reset to 0 the first
+     * tick the intersection clears. The hard reset (rather than a slow decay) ensures a
+     * series of momentary brush-bys can never accumulate into a kick — only one continuous
+     * overlap counts toward the threshold.
      *
      * <p>Once the counter reaches {@link #TRAIN_OVERLAP_KICK_TICKS} and the player is
      * actively grinding, {@link #stop(Player)} drops them. The same threshold gates new
@@ -359,10 +391,15 @@ public final class RailGrindHandler {
      * not just grinders, because the crush gate also blocks non-grinding players from
      * starting a grind: standing inside a parked carriage and trying to grind should fail
      * outright rather than snap onto the rail and immediately re-drop.
+     *
+     * <p>Overlap detection is a plain entity-bbox vs player-bbox test via
+     * {@code level.getEntitiesOfClass(CarriageContraptionEntity.class, player.getBoundingBox())}
+     * — the AABB returned by Mojang's spatial lookup is the carriage entity's own bounding
+     * box, no inflation, no per-bogey synthesis.
      */
     public static void tickTrainOverlap(Player player) {
         boolean overlapping = !player.level().getEntitiesOfClass(
-            CarriageContraptionEntity.class, player.getBoundingBox()).isEmpty();
+                CarriageContraptionEntity.class, player.getBoundingBox()).isEmpty();
 
         if (overlapping) {
             int next = TRAIN_OVERLAP_TICKS.getOrDefault(player.getUUID(), 0) + 1;
@@ -373,6 +410,13 @@ public final class RailGrindHandler {
         } else {
             TRAIN_OVERLAP_TICKS.remove(player.getUUID());
         }
+
+        // Surface the per-tick overlap result on the active GrindState (if any) so the debug
+        // HUD's collidingWithTrain line reads the live bool. Non-grinders have no GrindState
+        // to receive this; their overlap state is still visible via the always-on
+        // intersectingTrainAABB / trainOverlapTicks lines below the grind block in the HUD.
+        GrindState gs = ACTIVE.get(player.getUUID());
+        if (gs != null) gs.collidingWithTrain = overlapping;
     }
 
     /**
@@ -500,14 +544,18 @@ public final class RailGrindHandler {
     /**
      * Stops the grind and gives the player a launch impulse along the rail's tangent at their
      * current position, plus a vertical boost. Both components scale with the player's grind
-     * speed at the moment of dismount, so jumping off at TOP_SPEED produces a long, high arc
-     * while jumping off near MIN_SPEED is barely more than a vanilla jump.
+     * speed at the moment of dismount AND with the jump-charge ratio derived from
+     * {@code chargeTicks} (how long the client held jump before release, clamped to
+     * [{@link #JUMP_TRICK_CHARGE_INPUT_TIME_MIN}, {@link #JUMP_TRICK_CHARGE_INPUT_TIME_MAX}]).
+     * Charge ratio is purely additive on top of the existing speed-based formula — at 0 charge
+     * the launch is identical to the speed-only behavior, at full charge each component is
+     * scaled by (1 + LAUNCH_CHARGE_*_BONUS_MULT).
      *
      * Tangent-based direction means uphill rails launch up-and-forward, downhill rails launch
      * forward-and-slightly-down (skater-off-a-ramp feel) — the vertical base is added on top so
      * even modest grinds always net some upward velocity unless the rail is steeply descending.
      */
-    public static void stopWithLaunch(Player player) {
+    public static void stopWithLaunch(Player player, int chargeTicks) {
         GrindState gs = ACTIVE.get(player.getUUID());
         if (gs == null) {
             stop(player);
@@ -522,8 +570,17 @@ public final class RailGrindHandler {
         Vec3 chord = gs.toNode.getLocation().getLocation().subtract(gs.fromNode.getLocation().getLocation());
         if (tangent.x * chord.x + tangent.z * chord.z < 0) tangent = tangent.scale(-1);
 
-        double horizMag = speed * LAUNCH_HORIZONTAL_MULT;
-        double vertBoost = LAUNCH_VERTICAL_BASE + speed * LAUNCH_VERTICAL_SCALE;
+        double chargeRatio = computeChargeRatio(chargeTicks);
+        double speedMult  = Config.RAIL_JUMP_MOMENTUM.get();
+        double chargeMult = Config.RAIL_JUMP_CHARGE.get();
+        // railJumpMomentum scales both the horizontal speed-mult and the vertical speed-scale
+        // term. railJumpCharge scales both the horizontal and vertical charge-bonus mults.
+        // Vertical base launch (LAUNCH_VERTICAL_BASE) is intentionally not scaled — it's the
+        // floor that guarantees an upward kick at any speed and stays constant.
+        double horizMag = speed * LAUNCH_HORIZONTAL_MULT * speedMult
+                * (1.0 + chargeRatio * LAUNCH_CHARGE_HORIZONTAL_BONUS_MULT * chargeMult);
+        double vertBoost = (LAUNCH_VERTICAL_BASE + speed * LAUNCH_VERTICAL_SCALE * speedMult)
+                * (1.0 + chargeRatio * LAUNCH_CHARGE_VERTICAL_BONUS_MULT * chargeMult);
         Vec3 launch = new Vec3(
             tangent.x * horizMag,
             tangent.y * horizMag + vertBoost,
@@ -534,6 +591,20 @@ public final class RailGrindHandler {
         player.setDeltaMovement(launch);
         player.hurtMarked = true;  // forces a velocity packet to the client so the launch isn't predicted away
         player.fallDistance = 0.0F;
+    }
+
+    /**
+     * Maps a held-tick count to a 0..1 charge ratio over the configured window. Clamps to the
+     * window before normalizing so a malicious or out-of-range client-supplied value can't
+     * exceed the cap. Shared between the server-side launch math and the client-side overlay
+     * fill so the bar visually matches what the launch will compute.
+     */
+    public static double computeChargeRatio(int chargeTicks) {
+        int range = JUMP_TRICK_CHARGE_INPUT_TIME_MAX - JUMP_TRICK_CHARGE_INPUT_TIME_MIN;
+        if (range <= 0) return 0.0;
+        int clamped = Math.max(JUMP_TRICK_CHARGE_INPUT_TIME_MIN,
+                Math.min(JUMP_TRICK_CHARGE_INPUT_TIME_MAX, chargeTicks));
+        return (clamped - JUMP_TRICK_CHARGE_INPUT_TIME_MIN) / (double) range;
     }
 
     public static boolean isGrinding(Player player) {
@@ -595,7 +666,7 @@ public final class RailGrindHandler {
             gs.currentSpeed,
             computeTargetSpeed(gs, player),
             computeAcceleration(gs, player),
-            TOP_SPEED,
+            topSpeed(),
             gs.experiencedSlope,
             gs.position,
             gs.edge.getLength(),
@@ -636,17 +707,34 @@ public final class RailGrindHandler {
 
 
         if (player.level() instanceof ServerLevel sl) {
-            double speedRatio = Math.min(2.0, gs.currentSpeed / TOP_SPEED);
-            // Below 25% max speed → no particles. 25–50% → white, 50–75% → yellow, 75%+ → red.
+            double speedRatio = Math.min(2.0, gs.currentSpeed / topSpeed());
+            // Below 25% max speed → no particles. 25–50% → plain crit, 50%+ → crit + red dust.
+            // Cadence (interval) and count both scale with speed so a slow grind sheds a few
+            // sparks at long intervals while a top-speed grind emits a continuous stream.
             if (speedRatio >= 0.25) {
-                Vec3 feet = player.position();
-                DustParticleOptions spark =
-                    speedRatio >= 0.75 ? RED_SPARK
-                    : speedRatio >= 0.50 ? YELLOW_SPARK
-                    : WHITE_SPARK;
-                int count = 1 + (int) Math.round(speedRatio * 4);
-                double spread = 0.10 + speedRatio * 0.12;
-                sl.sendParticles(spark, feet.x, feet.y + 0.05, feet.z, count, spread, 0.05, spread, 0.0);
+                int interval = Math.max(1, (int) Math.round(1.0 / speedRatio));
+                if (gs.totalTicks % interval == 0) {
+                    // Travel-aligned tangent at the player's current edge position. Same chord-
+                    // flip as stopWithLaunch / getGrindFrame so it always points forward.
+                    double edgeLen = gs.edge.getLength();
+                    double t = edgeLen <= 0 ? 0 : Math.min(1.0, Math.max(0.0, gs.position / edgeLen));
+                    Vec3 tangent = sampleTangent(gs.graph, gs.edge, t);
+                    Vec3 chord = gs.toNode.getLocation().getLocation().subtract(gs.fromNode.getLocation().getLocation());
+                    if (tangent.x * chord.x + tangent.z * chord.z < 0) tangent = tangent.scale(-1);
+
+                    Vec3 feet = player.position();
+                    final double BACK_OFFSET = 0.4;
+                    double sx = feet.x - tangent.x * BACK_OFFSET;
+                    double sy = feet.y + 0.05 - tangent.y * BACK_OFFSET;
+                    double sz = feet.z - tangent.z * BACK_OFFSET;
+
+                    int count = 1 + (int) Math.round(speedRatio);
+                    double spread = 0.10 + speedRatio * 0.12;
+                    sl.sendParticles(ParticleTypes.CRIT, sx, sy, sz, count, spread, 0.05, spread, 0.0);
+                    if (speedRatio >= 0.50) {
+                        sl.sendParticles(RED_SPARK, sx, sy, sz, count, spread, 0.05, spread, 0.0);
+                    }
+                }
             }
         }
 
@@ -709,102 +797,29 @@ public final class RailGrindHandler {
         }
 
         applyTickMotion(player, gs, absVelocity);
-        checkTrainCollision(player, gs);
-    }
-
-    /**
-     * Detect the player's hitbox intersecting any bogey's AABB and damage them. The
-     * intersection itself is what {@link GrindState#collidingWithTrain} reports — the
-     * debug bool flips on AABB-vs-AABB overlap, independent of the speed gate that decides
-     * whether damage actually lands.
-     *
-     * <p>Pipeline:
-     * <ol>
-     *   <li>{@code level.getEntitiesOfClass(CarriageContraptionEntity.class, …)} around
-     *       {@code player.getBoundingBox().inflate(TRAIN_SEARCH_PADDING)} — same spatial
-     *       lookup Create uses, just from the opposite side. The inflation absorbs a few
-     *       ticks of train approach so a fast oncoming carriage can't enter the player's
-     *       space between checks.</li>
-     *   <li>For each carriage, build an AABB around each bogey from its two axle
-     *       {@link TravellingPoint}s ({@link CarriageBogey#leading()} /
-     *       {@link CarriageBogey#trailing()}), inflated by {@link #BOGEY_AABB_INFLATE} to
-     *       give the line-pair real volume.</li>
-     *   <li>If {@code player.getBoundingBox().intersects(bogeyAABB)} for any bogey, flag
-     *       {@code gs.collidingWithTrain = true}.</li>
-     *   <li>Then mirror Create's {@code diffMotion = trainMotion − entityMotion} using
-     *       {@code cce.getDeltaMovement()} vs {@code player.getDeltaMovement()}, gate on
-     *       {@code |diffMotion| > 0.35} (Create's threshold), and deal {@code relSpeed × 10}
-     *       damage via {@link #FLATTENED_DAMAGE}. ModEvents skips its speed×10 multiplier
-     *       for this source so the calibrated amount lands. Vanilla hurt I-frames throttle
-     *       sustained overlap.</li>
-     * </ol>
-     */
-    private static void checkTrainCollision(Player player, GrindState gs) {
-        gs.collidingWithTrain = false;
-
-        AABB playerBounds = player.getBoundingBox();
-        List<CarriageContraptionEntity> nearby = player.level().getEntitiesOfClass(
-            CarriageContraptionEntity.class, playerBounds.inflate(TRAIN_SEARCH_PADDING));
-        if (nearby.isEmpty()) return;
-
-        boolean damageImmune = player.isCreative() || player.isSpectator();
-
-        for (CarriageContraptionEntity cce : nearby) {
-            Carriage carriage = cce.getCarriage();
-            if (carriage == null) continue;
-
-            // Two bogeys per carriage; the second is null on single-bogey carriages.
-            if (!intersectsBogeyAABB(playerBounds, carriage.bogeys.getFirst(), gs.graph)
-                && !intersectsBogeyAABB(playerBounds, carriage.bogeys.getSecond(), gs.graph))
-                continue;
-
-            gs.collidingWithTrain = true;
-            // Creative/spectator still surface the intersection in the debug HUD, just no hit.
-            if (damageImmune) return;
-
-            Train train = carriage.train;
-            if (train == null) return;
-
-            // diffMotion in Create's terms: carriage motion minus player motion.
-            // Stationary-train + grinding-player and stationary-player + moving-train both
-            // produce a real relSpeed; same-direction-same-speed produces ≈0.
-            Vec3 trainVel = cce.getDeltaMovement();
-            Vec3 playerVel = player.getDeltaMovement();
-            double relSpeed = trainVel.subtract(playerVel).length();
-
-            // 0.35 b/t gate matches Create's handleDamageFromTrain — exempts parked and
-            // slow-coasting carriages even on overlap. CRUISE_SPEED grinding into a parked
-            // train won't damage; anything from ~0.35 b/t up will.
-            if (relSpeed < 0.35) return;
-
-            float damage = (float) (relSpeed * 10.0);
-            Holder<DamageType> dt = player.level().registryAccess()
-                .registryOrThrow(Registries.DAMAGE_TYPE)
-                .getHolderOrThrow(FLATTENED_DAMAGE);
-            player.hurt(new DamageSource(dt), damage);
-            return;
-        }
-    }
-
-    /** True iff {@code target} intersects an AABB built from the bogey's two axle TravellingPoints inflated by {@link #BOGEY_AABB_INFLATE}. False on null bogey or unsettled axles. */
-    private static boolean intersectsBogeyAABB(AABB target, CarriageBogey bogey, TrackGraph graph) {
-        if (bogey == null) return false;
-        TravellingPoint leading = bogey.leading();
-        TravellingPoint trailing = bogey.trailing();
-        if (leading == null || leading.edge == null
-            || trailing == null || trailing.edge == null) return false;
-        Vec3 a = leading.getPosition(graph);
-        Vec3 b = trailing.getPosition(graph);
-        return target.intersects(new AABB(a, b).inflate(BOGEY_AABB_INFLATE));
     }
 
     private static double computeTargetSpeed(GrindState gs, Player player) {
-        double base = player.isShiftKeyDown() ? TOP_SPEED : CRUISE_SPEED;
-
-        // Asymmetric slope scaling: descents lift the cap (DOWNHILL_FACTOR), ascents cut it (UPHILL_FACTOR).
         double slope = gs.experiencedSlope;  // +up / -down
-        double factor = slope < 0 ? DOWNHILL_FACTOR : UPHILL_FACTOR;
-        base *= Math.max(0.0, 1.0 - slope * factor);
+        double base;
+        if (player.isShiftKeyDown()) {
+            // Sneak: ride at topSpeed with the asymmetric slope cap — descents lift it (DOWNHILL_FACTOR), ascents cut it (UPHILL_FACTOR).
+            base = topSpeed();
+            double factor = slope < 0 ? DOWNHILL_FACTOR : UPHILL_FACTOR;
+            base *= Math.max(0.0, 1.0 - slope * factor);
+        } else if (slope < 0) {
+            // No sneak, descending: gravity-pulled coast that ramps from DOWNHILL_CRUISE_MIN_FRACTION
+            // (gentle slope) up to DOWNHILL_CRUISE_MAX_FRACTION (max slope) of topSpeed. Replaces the
+            // old CRUISE_SPEED × (1 − slope·DOWNHILL_FACTOR) formula, which capped un-sneaked descents
+            // at ~33% topSpeed even at maximum steepness — too gentle once the downhill accel boost
+            // can actually push speed up faster.
+            double steepness = Math.min(1.0, -slope);
+            base = topSpeed() * (DOWNHILL_CRUISE_MIN_FRACTION
+                    + (DOWNHILL_CRUISE_MAX_FRACTION - DOWNHILL_CRUISE_MIN_FRACTION) * steepness);
+        } else {
+            // No sneak, flat or ascending: cruise pace, with uphill cut.
+            base = CRUISE_SPEED * Config.CRUISE_GRIND_SPEED.get() * Math.max(0.0, 1.0 - slope * UPHILL_FACTOR);
+        }
 
         if (gs.edge.isTurn()) base *= CURVE_FACTOR;
 
@@ -812,9 +827,9 @@ public final class RailGrindHandler {
     }
 
     private static double computeAcceleration(GrindState gs, Player player) {
-        double base = player.isShiftKeyDown() ? ACCELERATION * BOOST_ACCEL_MULT : ACCELERATION;
+        double base = player.isShiftKeyDown() ? ACCELERATION * Config.SNEAK_ACCELERATION.get() : ACCELERATION;
         double slope = gs.experiencedSlope;
-        if (slope < 0) base *= 1.0 + (-slope) * (DOWNHILL_ACCEL_BOOST - 1.0);
+        if (slope < 0) base *= 1.0 + (-slope) * (DOWNHILL_ACCEL_BOOST - 1.0) * Config.DOWNWARD_MOMENTUM_GAIN.get();
         return base;
     }
 

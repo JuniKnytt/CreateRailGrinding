@@ -29,12 +29,11 @@ public class Networking {
     /**
      * Maximum world-space distance from the player's feet to a rail spline (any track type —
      * plain block or bezier curve) that still counts as "near a rail" for the polling jump+sneak
-     * trigger. 1.25 captures a rail under the player's feet (~0.5–0.87 depending on geometry)
-     * and a same-level adjacent rail (~1.12), but rejects diagonals (~1.5+) — the player has to
-     * actually be next to or on top of the rail, not merely close to it. Squared at the sample
-     * site.
+     * trigger. 1.75 captures a rail under the player's feet (~0.5–0.87 depending on geometry),
+     * a same-level adjacent rail (~1.12), and gives a quarter-block of extra leniency so the
+     * player doesn't have to be perfectly aligned to grab on. Squared at the sample site.
      */
-    private static final double NEAREST_RAIL_MAX_DIST = 1.5;
+    private static final double NEAREST_RAIL_MAX_DIST = 1.75;
 
     /**
      * Right-click → grind init payload.
@@ -114,7 +113,6 @@ public class Networking {
             if (RailGrindHandler.isGrinding(player)) return;
             if (RailGrindHandler.isPlayerOnRailGrindCooldown(player)) return;
             if (RailGrindHandler.isPlayerCrushedByTrain(player)) return;
-            if (player.getMainHandItem().getItem() != Items.AIR) return;
             if (!(player.getItemBySlot(EquipmentSlot.FEET).getItem() instanceof DivingBootsItem)) return;
 
             TrackGraphLocation loc = RailGrindHandler.findNearestRailLocation(
@@ -133,7 +131,10 @@ public class Networking {
         // Only the jump-key handler in ClientInputHandler sends StopGrindPayload, so any
         // arrival here is a deliberate dismount that should produce the launch boost. Other
         // server-side stop paths (rail end, login/logout, stuck) still call plain stop().
-        context.enqueueWork(() -> RailGrindHandler.stopWithLaunch(context.player()));
+        // The held-jump charge ticks are clamped to the configured window inside stopWithLaunch
+        // → computeChargeRatio, so an out-of-range value from a malicious client just saturates
+        // at the max ratio.
+        context.enqueueWork(() -> RailGrindHandler.stopWithLaunch(context.player(), payload.chargeTicks()));
     }
 
     private static void handleSteerInput(SteerInputPayload payload, IPayloadContext context) {
