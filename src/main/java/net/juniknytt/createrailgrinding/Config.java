@@ -30,7 +30,7 @@ public final class Config {
             .defineInRange("sneakAcceleration", 1.0, 0.1, 2.0);
 
     public static final ModConfigSpec.DoubleValue DOWNWARD_MOMENTUM_GAIN = SERVER_BUILDER
-            .comment("Acceleration multiplier grinding down inclines.")
+            .comment("Acceleration multiplier going down inclines.")
             .defineInRange("downwardMomentumGain", 0.5, 0.1, 2.0);
 
     public static final ModConfigSpec.DoubleValue RAIL_JUMP_CHARGE = SERVER_BUILDER
