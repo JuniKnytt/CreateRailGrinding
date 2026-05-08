@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Read(//root/.gradle/caches/modules-2/**)",
-      "Read(//home/**)",
-      "WebFetch(domain:raw.githubusercontent.com)"
-    ]
-  }
-}
