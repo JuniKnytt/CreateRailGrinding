@@ -3,6 +3,9 @@ package net.juniknytt.createrailgrinding;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 public final class Config {
+
+    //TO DO SORT THESE OUT, THEY ARE OKAY AS THEY ARE
+
     private static final ModConfigSpec.Builder CLIENT_BUILDER = new ModConfigSpec.Builder();
 
     public static final ModConfigSpec.BooleanValue DEBUG_MODE = CLIENT_BUILDER
