@@ -18,6 +18,7 @@ runs
 run-data
 repo
 CLAUDE.md
+LICENSE.md
 
 # hidden — ignore all root-level dot-entries by default; whitelist these
 /.*
