@@ -55,7 +55,7 @@ public final class RailGrindDebugHud {
                 String.format(Locale.ROOT, "totalTicks:       %d", info.totalTicks()),
                 String.format(Locale.ROOT, "lateralSign:      %+.0f", info.lateralSign()),
                 String.format(Locale.ROOT, "edge.isTurn():    %b", info.edgeIsTurn()),
-                String.format(Locale.ROOT, "shiftHeld:        %b", info.shiftHeld()),
+                String.format(Locale.ROOT, "crouchAccelerating: %b", info.crouchAccelerating()),
                 String.format(Locale.ROOT, "collidingWithTrain: %b", info.collidingWithTrain()),
             };
             for (String line : grindLines) {

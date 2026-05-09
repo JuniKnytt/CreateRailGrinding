@@ -9,12 +9,16 @@ public final class Config {
     private static final ModConfigSpec.Builder CLIENT_BUILDER = new ModConfigSpec.Builder();
 
     public static final ModConfigSpec.BooleanValue DEBUG_MODE = CLIENT_BUILDER
-            .comment("Used for testing. Displays many values while rail grinding.")
+            .comment("Used for testing. Displays many values while rail-grinding.")
             .define("debugMode", false);
 
     public static final ModConfigSpec.DoubleValue SOUND_VOLUME = CLIENT_BUILDER
             .comment("Volume for all rail-grinding sounds.")
             .defineInRange("soundVolume", 0.5, 0.0, 1.0);
+
+    public static final ModConfigSpec.BooleanValue OVERRIDE_KEYBINDINGS = CLIENT_BUILDER
+            .comment("Overrides rail-grinding actions with alternative keybindings under Key Binds within Controls in Settings.")
+            .define("overrideKeybindings", false);
 
     public static final ModConfigSpec SPEC = CLIENT_BUILDER.build();
 

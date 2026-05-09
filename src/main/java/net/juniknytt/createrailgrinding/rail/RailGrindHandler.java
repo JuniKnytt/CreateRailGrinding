@@ -1,6 +1,7 @@
 package net.juniknytt.createrailgrinding.rail;
 
 import com.simibubi.create.Create;
+import com.simibubi.create.content.kinetics.chainConveyor.ServerChainConveyorHandler;
 import com.simibubi.create.content.trains.entity.CarriageContraptionEntity;
 import com.simibubi.create.content.trains.graph.TrackEdge;
 import com.simibubi.create.content.trains.graph.TrackGraph;
@@ -16,22 +17,31 @@ import net.createmod.catnip.data.Couple;
 import net.juniknytt.createrailgrinding.Config;
 import net.juniknytt.createrailgrinding.RailGrind;
 import net.juniknytt.createrailgrinding.client.BalancingPoseTracker;
+import net.juniknytt.createrailgrinding.network.GrindAccelInputPayload;
 import net.juniknytt.createrailgrinding.network.RailGrindSyncPayload;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Holder;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.common.NeoForgeMod;
+import net.neoforged.neoforge.fluids.FluidType;
 import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.registries.NeoForgeRegistries;
 import org.joml.Vector3f;
 
 import java.util.List;
@@ -87,6 +97,19 @@ public final class RailGrindHandler {
     private static final double DOWNHILL_ACCEL_BOOST = 5.0;               // accel up to 5× on the steepest descents — gives downhill grinding a sneak-tier kick. The slope-based bonus is further scaled by Config.DOWNWARD_MOMENTUM_GAIN (0.1–2.0) for server-side tuning.
     private static final double CURVE_FACTOR = 0.75;                      // bezier turns trim 25%
     private static final double MIN_SPEED = 0.10;                         // floor at walking pace (~2 m/s) on steep climbs
+    // Fluid drag. Water is the user-visible 50% reference; lava is steeper since vanilla
+    // swimming through it is markedly worse than water. OTHER covers any custom mod fluid —
+    // FluidType has no canonical "swim speed" property to derive from, so we treat unknowns
+    // as water-like rather than guessing from motionScale. When the player straddles
+    // multiple fluid types the slowest factor wins (see computeFluidMultiplier).
+    private static final double WATER_FLUID_FACTOR = 0.5;
+    private static final double LAVA_FLUID_FACTOR = 0.25;
+    private static final double OTHER_FLUID_FACTOR = 0.5;
+    // Depth strider eases the slowdown linearly from the fluid factor up to this floor at
+    // _FULL_LEVEL. At level 0 the slowdown is the unmodified factor; at level 3 it caps at
+    // FLOOR (only 20% slower than air). Levels above 3 don't push the floor any further.
+    private static final double DEPTH_STRIDER_FLUID_FLOOR = 0.8;
+    private static final int DEPTH_STRIDER_FLUID_FULL_LEVEL = 3;
     private static final double Y_OFFSET = 0.5;                           // vertical hover above rail line (collision bypassed by noPhysics)
     private static final double LATERAL_OFFSET = 1.0;                  // 5/16 — matches the rail bar's position within the track block, so the player rides on the bar instead of the block centerline. Side is picked once at grind init from the player's pre-teleport position (GrindState.lateralSign).
     private static final double MAX_STEP = 2.0;                           // smooth catch-up cap (~40 m/s) — must exceed TOP_SPEED · downhill boost
@@ -137,6 +160,7 @@ public final class RailGrindHandler {
         double lateralSign;  // +1 or -1, fixed for the grind: which rail bar the player is riding on. Picked at init from prePos.
         Vec3 expectedPos;    // where the player *should* be after last tick's velocity was applied — used as the velocity reference instead of player.position(), which lags the client by 1+ ticks and accumulates chord-cut drift on parallel curves.
         int steerSign;       // -1 = left, 0 = none, +1 = right. Synced from the local player via SteerInputPayload (sent only when the value flips). advanceJunction reads this as targetDot for the same lateral-projection algorithm Create's TravellingPoint.steer uses on player-controlled trains.
+        byte accelInputMode = GrindAccelInputPayload.VANILLA;  // VANILLA (server polls isShiftKeyDown) / OVERRIDE_OFF / OVERRIDE_ON. Synced from the local player via GrindAccelInputPayload (sent only when the value flips). The OVERRIDE_* states make the override-key path independent of shift, so a player accelerating via the override key gets it even though Minecraft sees no sneak input.
         boolean collidingWithTrain;  // set by tickTrainOverlap each server tick: true iff the player's bounding box intersects any CarriageContraptionEntity's bounding box this tick. Surfaced via GrindDebugInfo for the debug HUD; the same per-tick overlap also feeds the TRAIN_OVERLAP_TICKS counter that drives the kick / start-prevention gates.
 
         GrindState(TrackGraph graph, TrackNode fromNode, TrackNode toNode, TrackEdge edge, double position) {
@@ -158,6 +182,39 @@ public final class RailGrindHandler {
         GrindState gs = ACTIVE.get(player.getUUID());
         if (gs == null) return;
         gs.steerSign = Math.max(-1, Math.min(1, steerSign));
+    }
+
+    /**
+     * Updates the player's accelerate-input source. No-op when the player isn't grinding.
+     * Mode comes from {@link GrindAccelInputPayload}; values outside the known constants are
+     * coerced to {@link GrindAccelInputPayload#VANILLA} so a malicious or stale client can't
+     * leave the state in an undefined-accelerating mode.
+     */
+    public static void setAccelInputMode(Player player, byte mode) {
+        GrindState gs = ACTIVE.get(player.getUUID());
+        if (gs == null) return;
+        if (mode == GrindAccelInputPayload.VANILLA
+                || mode == GrindAccelInputPayload.OVERRIDE_OFF
+                || mode == GrindAccelInputPayload.OVERRIDE_ON) {
+            gs.accelInputMode = mode;
+        } else {
+            gs.accelInputMode = GrindAccelInputPayload.VANILLA;
+        }
+    }
+
+    /**
+     * Whether the player is currently asking the grind logic to accelerate (= the historical
+     * "shift held" path). When the client has sent an OVERRIDE_* mode, the override key state
+     * wins regardless of the actual shift state — required so a player using the override
+     * doesn't accidentally accelerate by sneaking, and conversely so the override key alone
+     * triggers acceleration even though no sneak is registered.
+     */
+    private static boolean isAcceleratingForGrind(Player player, GrindState gs) {
+        return switch (gs.accelInputMode) {
+            case GrindAccelInputPayload.OVERRIDE_ON -> true;
+            case GrindAccelInputPayload.OVERRIDE_OFF -> false;
+            default -> player.isShiftKeyDown();
+        };
     }
 
     public static boolean railgrinding(Player player, BlockPos trackPos, Vec3 prePos, double entryVelocity) {
@@ -655,17 +712,20 @@ public final class RailGrindHandler {
         int totalTicks,
         double lateralSign,
         boolean edgeIsTurn,
-        boolean shiftHeld,
+        boolean crouchAccelerating,
         boolean collidingWithTrain
     ) {}
 
     public static GrindDebugInfo getGrindDebugInfo(Player player) {
         GrindState gs = ACTIVE.get(player.getUUID());
         if (gs == null) return null;
+        // Mirror the fluid scaling tick() applies, so the HUD's targetSpeed/accel lines
+        // match the values actually driving motion this tick rather than the dry-air values.
+        double fluidMult = computeFluidMultiplier(player);
         return new GrindDebugInfo(
             gs.currentSpeed,
-            computeTargetSpeed(gs, player),
-            computeAcceleration(gs, player),
+            computeTargetSpeed(gs, player) * fluidMult,
+            computeAcceleration(gs, player) * fluidMult,
             topSpeed(),
             gs.experiencedSlope,
             gs.position,
@@ -674,7 +734,7 @@ public final class RailGrindHandler {
             gs.totalTicks,
             gs.lateralSign,
             gs.edge.isTurn(),
-            player.isShiftKeyDown(),
+            isAcceleratingForGrind(player, gs),
             gs.collidingWithTrain
         );
     }
@@ -703,6 +763,29 @@ public final class RailGrindHandler {
     public static void tick(Player player) {
         GrindState gs = ACTIVE.get(player.getUUID());
         if (gs == null) return;
+
+        // Player wrench-mounted a Create chain conveyor — both systems drive motion via
+        // setDeltaMovement, so leaving the grind active fights the chain ride. Drop cleanly
+        // so the wrench-mount hands off into chain riding. ServerChainConveyorHandler
+        // populates this map server-side from the wrench's ServerboundChainConveyorRidingPacket
+        // and refreshes it every tick via TTL packets, so the entry is present from the
+        // first tick of the ride; stop()'s ACTIVE.remove guards against the second-tick
+        // re-entry being a no-op.
+        if (ServerChainConveyorHandler.hangingPlayers.containsKey(player.getUUID())) {
+            stop(player);
+            return;
+        }
+
+        // Riptide-style auto spin attack fights our setDeltaMovement and yanks the player off
+        // the rail at odd angles. Detect via the LivingEntity flag (set by startAutoSpinAttack)
+        // rather than checking for the trident item — commands, potions, and other mods can
+        // raise this flag without a trident in hand, and we want to drop the grind in all of
+        // those cases too.
+        if (player.isAutoSpinAttack()) {
+            stop(player);
+            return;
+        }
+
         gs.totalTicks++;
 
 
@@ -765,8 +848,25 @@ public final class RailGrindHandler {
         }
         gs.prevPos = currentPos;
 
-        double targetSpeed = computeTargetSpeed(gs, player);
-        double accel = computeAcceleration(gs, player);
+        // Fluid drag (water/lava/custom fluids) scales target speed and per-tick accel
+        // symmetrically. Multiplying outside the helpers keeps them fluid-unaware and lets
+        // a single computeFluidMultiplier call cover both target and accel for one tick.
+        // The MIN_SPEED floor inside computeTargetSpeed scales with the multiplier as a
+        // side-effect (Math.max(MIN_SPEED, base) * mult == max(MIN_SPEED * mult, base * mult)
+        // for positive mult), so the player can drop below the dry-air floor in fluid.
+        //
+        // Hard cap on fluid entry: without this, decel from TOP_SPEED to the fluid-scaled
+        // target via the (also-fluid-scaled) accel takes ~75 ticks at half-mult — entering
+        // water at full speed should feel like hitting a wall, not a 4-second taper. The cap
+        // gates only when fluidMult < 1.0 so out-of-fluid descent overshoot still decays
+        // gradually through the existing decel branch.
+        double fluidMult = computeFluidMultiplier(player);
+        double targetSpeed = computeTargetSpeed(gs, player) * fluidMult;
+        double accel = computeAcceleration(gs, player) * fluidMult;
+
+        if (fluidMult < 1.0 && gs.currentSpeed > targetSpeed) {
+            gs.currentSpeed = targetSpeed;
+        }
 
         if (gs.currentSpeed < targetSpeed)
             gs.currentSpeed = Math.min(gs.currentSpeed + accel, targetSpeed);
@@ -801,8 +901,9 @@ public final class RailGrindHandler {
 
     private static double computeTargetSpeed(GrindState gs, Player player) {
         double slope = gs.experiencedSlope;  // +up / -down
+        boolean crouchAccelerating = isAcceleratingForGrind(player, gs);
         double base;
-        if (player.isShiftKeyDown()) {
+        if (crouchAccelerating) {
             // Sneak: ride at topSpeed with the asymmetric slope cap — descents lift it (DOWNHILL_FACTOR), ascents cut it (UPHILL_FACTOR).
             base = topSpeed();
             double factor = slope < 0 ? DOWNHILL_FACTOR : UPHILL_FACTOR;
@@ -827,10 +928,66 @@ public final class RailGrindHandler {
     }
 
     private static double computeAcceleration(GrindState gs, Player player) {
-        double base = player.isShiftKeyDown() ? ACCELERATION * Config.SNEAK_ACCELERATION.get() : ACCELERATION;
+        double base = isAcceleratingForGrind(player, gs) ? ACCELERATION * Config.SNEAK_ACCELERATION.get() : ACCELERATION;
         double slope = gs.experiencedSlope;
         if (slope < 0) base *= 1.0 + (-slope) * (DOWNHILL_ACCEL_BOOST - 1.0) * Config.DOWNWARD_MOMENTUM_GAIN.get();
         return base;
+    }
+
+    /**
+     * Returns the speed-scale factor in [WATER/LAVA/OTHER_FLUID_FACTOR..1.0] applied to
+     * target speed, acceleration, and (via the cap in tick()) current speed when the player
+     * is touching one or more fluids. 1.0 means out of fluid.
+     *
+     * <p>Iterates {@link NeoForgeRegistries#FLUID_TYPES} so any fluid the player overlaps
+     * is considered, not just water/lava — multiple-fluid touches resolve to the slowest
+     * factor (e.g., a custom fluid with factor 0.3 wins over water's 0.5 if both apply).
+     * Each fluid maps to a hardcoded factor: vanilla water/lava get their own constants,
+     * everything else falls back to OTHER_FLUID_FACTOR (water-like) since FluidType has no
+     * canonical swim-speed property to derive from automatically.
+     *
+     * <p>Depth strider eases the slowdown by lerping the slowest-factor up toward
+     * {@link #DEPTH_STRIDER_FLUID_FLOOR} based on the enchantment's level. The clamp at
+     * {@link #DEPTH_STRIDER_FLUID_FULL_LEVEL} matches vanilla's depth strider cap — levels
+     * above 3 don't reduce the slowdown further.
+     */
+    private static double computeFluidMultiplier(Player player) {
+        if (!player.isInFluidType()) return 1.0;
+
+        FluidType waterType = NeoForgeMod.WATER_TYPE.value();
+        FluidType lavaType = NeoForgeMod.LAVA_TYPE.value();
+        double slowest = 1.0;
+        for (FluidType type : NeoForgeRegistries.FLUID_TYPES) {
+            if (!player.isInFluidType(type)) continue;
+            double factor;
+            if (type == waterType) {
+                factor = WATER_FLUID_FACTOR;
+            } else if (type == lavaType) {
+                factor = LAVA_FLUID_FACTOR;
+            } else {
+                factor = OTHER_FLUID_FACTOR;
+            }
+            if (factor < slowest) slowest = factor;
+        }
+
+        if (slowest >= 1.0) return 1.0;
+
+        int dsLevel = Math.min(DEPTH_STRIDER_FLUID_FULL_LEVEL, getDepthStriderLevel(player));
+        double dsRatio = dsLevel / (double) DEPTH_STRIDER_FLUID_FULL_LEVEL;
+        return slowest + (DEPTH_STRIDER_FLUID_FLOOR - slowest) * dsRatio;
+    }
+
+    /**
+     * Highest depth strider level across the player's equipped armor (0 if none equipped).
+     * Uses the registry-holder lookup form because in 1.21+ {@link Enchantments#DEPTH_STRIDER}
+     * is a {@link net.minecraft.resources.ResourceKey ResourceKey}, not a direct enchantment
+     * instance — the level is read against the world's enchantment registry.
+     */
+    private static int getDepthStriderLevel(Player player) {
+        Holder<Enchantment> ench = player.level().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.DEPTH_STRIDER);
+        return EnchantmentHelper.getEnchantmentLevel(ench, player);
     }
 
     private static void applyTickMotion(Player player, GrindState gs, double absVelocity) {

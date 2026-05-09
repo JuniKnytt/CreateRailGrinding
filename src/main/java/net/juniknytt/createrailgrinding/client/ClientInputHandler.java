@@ -6,8 +6,10 @@ import com.simibubi.create.content.trains.track.ITrackBlock;
 import com.simibubi.create.content.trains.track.TrackBlockOutline;
 import com.simibubi.create.content.trains.track.TrackBlockOutline.BezierPointSelection;
 import com.simibubi.create.content.trains.track.TrackMaterial;
+import net.juniknytt.createrailgrinding.Config;
 import net.juniknytt.createrailgrinding.RailGrind;
 import net.juniknytt.createrailgrinding.client.BalancingPoseTracker;
+import net.juniknytt.createrailgrinding.network.GrindAccelInputPayload;
 import net.juniknytt.createrailgrinding.network.Networking;
 import net.juniknytt.createrailgrinding.network.StartGrindFromNearestPayload;
 import net.juniknytt.createrailgrinding.network.SteerInputPayload;
@@ -174,10 +176,25 @@ public class ClientInputHandler {
         LocalPlayer player = mc.player;
         if (player == null) return;
         if (BalancingPoseTracker.isBalancing(player)) return;
-        if (!mc.options.keyJump.isDown()) return;
-        if (!mc.options.keyShift.isDown()) return;
+        if (!isMountInputHeld(mc)) return;
         if (!(player.getItemBySlot(EquipmentSlot.FEET).getItem() instanceof DivingBootsItem)) return;
         PacketDistributor.sendToServer(StartGrindFromNearestPayload.INSTANCE);
+    }
+
+    /**
+     * True iff the player is holding the configured mount-trigger this tick. The default trigger
+     * is jump+sneak; when {@link Config#OVERRIDE_KEYBINDINGS} is enabled, the bound "Mount
+     * Override" key replaces the combo. The override path short-circuits to false when the key is
+     * unbound (KeyMapping with InputConstants.UNKNOWN reports {@code isDown() == false}, but we
+     * also guard explicitly so a future change to that contract can't accidentally fire the trigger
+     * every tick without any user input).
+     */
+    private static boolean isMountInputHeld(Minecraft mc) {
+        if (Config.OVERRIDE_KEYBINDINGS.get()) {
+            if (!ModKeyMappings.isMountOverrideBound()) return false;
+            return ModKeyMappings.RAIL_MOUNT_OVERRIDE.isDown();
+        }
+        return mc.options.keyJump.isDown() && mc.options.keyShift.isDown();
     }
 
     @SubscribeEvent
@@ -198,6 +215,15 @@ public class ClientInputHandler {
      * Reset to 0 on dismount and on disconnect so a stale value can't survive a session boundary.
      */
     private static int lastSentSteer = 0;
+
+    /**
+     * Most-recently-sent accelerate-input mode ({@link GrindAccelInputPayload#VANILLA},
+     * {@link GrindAccelInputPayload#OVERRIDE_OFF}, {@link GrindAccelInputPayload#OVERRIDE_ON}).
+     * Edge-triggered like {@link #lastSentSteer}, so packets only fire when the mode flips. Reset
+     * to VANILLA on session boundaries so the server's accel logic can never inherit a stale
+     * OVERRIDE_ON from a previous session.
+     */
+    private static byte lastSentAccelMode = GrindAccelInputPayload.VANILLA;
 
     /**
      * Polls the strafe keys (vanilla keyLeft / keyRight, A/D by default) while grinding and
@@ -226,6 +252,37 @@ public class ClientInputHandler {
     }
 
     /**
+     * Polls the accelerate-input source and tells the server which one to consult. Edge-triggered
+     * like {@link #onSteerTick} — only sends on mode flip.
+     *
+     * <p>Mode resolution: when overrides are enabled in config and the override key is bound,
+     * accel state derives from the override key (OVERRIDE_ON / OVERRIDE_OFF). Otherwise the
+     * server falls back to {@code player.isShiftKeyDown()} via the VANILLA mode.
+     *
+     * <p>Polled every tick (not just while balancing) so that a config or rebind change while
+     * the player is mid-grind takes effect on the next tick — leaving stale OVERRIDE_* on the
+     * server after the user disables config in the middle of a grind would otherwise pin them
+     * into not-accelerating regardless of shift state.
+     */
+    @SubscribeEvent
+    public static void onAccelInputTick(ClientTickEvent.Post event) {
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer player = mc.player;
+        if (player == null) return;
+        byte mode;
+        if (Config.OVERRIDE_KEYBINDINGS.get() && ModKeyMappings.isAccelOverrideBound()) {
+            mode = ModKeyMappings.GRIND_CROUCH_ACCELERATE_OVERRIDE.isDown()
+                    ? GrindAccelInputPayload.OVERRIDE_ON
+                    : GrindAccelInputPayload.OVERRIDE_OFF;
+        } else {
+            mode = GrindAccelInputPayload.VANILLA;
+        }
+        if (mode == lastSentAccelMode) return;
+        PacketDistributor.sendToServer(new GrindAccelInputPayload(mode));
+        lastSentAccelMode = mode;
+    }
+
+    /**
      * Wipe stale client-side grind state on world join/leave/respawn. Without this,
      * a UUID left in {@link BalancingPoseTracker} from the previous session re-applies
      * the T-pose (and in some cases keeps {@code noPhysics} set on a freshly loaded
@@ -251,6 +308,7 @@ public class ClientInputHandler {
         BalancingPoseTracker.clear();
         GrindSoundController.clearAll();
         lastSentSteer = 0;
+        lastSentAccelMode = GrindAccelInputPayload.VANILLA;
         chargeStartGameTime = -1L;
         if (player != null) {
             player.noPhysics = false;

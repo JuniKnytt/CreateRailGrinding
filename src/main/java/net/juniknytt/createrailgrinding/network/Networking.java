@@ -95,6 +95,10 @@ public class Networking {
                         SteerInputPayload.STREAM_CODEC,
                         Networking::handleSteerInput)
                 .playToServer(
+                        GrindAccelInputPayload.TYPE,
+                        GrindAccelInputPayload.STREAM_CODEC,
+                        Networking::handleAccelInput)
+                .playToServer(
                         StartGrindFromNearestPayload.TYPE,
                         StartGrindFromNearestPayload.STREAM_CODEC,
                         Networking::handleStartFromNearest);
@@ -139,6 +143,10 @@ public class Networking {
 
     private static void handleSteerInput(SteerInputPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> RailGrindHandler.setSteerInput(context.player(), payload.sign()));
+    }
+
+    private static void handleAccelInput(GrindAccelInputPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> RailGrindHandler.setAccelInputMode(context.player(), payload.mode()));
     }
 
     private static void handleTeleport(TeleportToRailPacket payload, IPayloadContext context) {

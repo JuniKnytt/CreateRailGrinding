@@ -1,2 +1,6 @@
 {
+    "createrailgrinding.dismount_prompt": "Press %1$s to Dismount",
+    "key.categories.createrailgrinding": "Rail Grinding Overrides (Toggled in Client Config)",
+    "key.createrailgrinding.rail_mount_override": "Mount Override",
+    "key.createrailgrinding.grind_crouch_accelerate_override": "Crouch Accelerate Override"
 }

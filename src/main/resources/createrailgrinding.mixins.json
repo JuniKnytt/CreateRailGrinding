@@ -7,7 +7,8 @@
     "PlayerEdgeMixin"
   ],
   "client": [
-    "client.PlayerModelMixin"
+    "client.PlayerModelMixin",
+    "client.JumpChargeCameraMixin"
   ],
   "injectors": {
     "defaultRequire": 1
