@@ -24,7 +24,11 @@ public final class ClientPayloadHandler {
             // client; playCollide routes through level.playLocalSound so the sound engine
             // attenuates remote starts by distance and the local player's start stays
             // full-volume because their listener position equals the sound origin.
-            if (payload.grinding()) {
+            //
+            // Silent grind-start syncs (portal-driven re-grinds) skip both the collide sound
+            // and the dismount-prompt overlay so the cross-dim handoff feels like a
+            // continuation of the same grind, not a fresh mount.
+            if (payload.grinding() && !payload.silent()) {
                 GrindSoundController.playCollide(player);
 
                 // Show the dismount prompt for the local player only — same path vanilla

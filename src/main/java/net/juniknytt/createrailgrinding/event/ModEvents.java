@@ -1,12 +1,19 @@
 package net.juniknytt.createrailgrinding.event;
 
 import net.juniknytt.createrailgrinding.RailGrind;
+import net.juniknytt.createrailgrinding.effect.ModEffects;
 import net.juniknytt.createrailgrinding.rail.RailGrindHandler;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageTypes;
+import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
@@ -24,6 +31,10 @@ public class ModEvents
         // tickCooldown can drain it back to zero so a new grind can start. Cheap when
         // the player has no cooldown entry (single map lookup, early return).
         RailGrindHandler.tickCooldown(player);
+        // Drain the post-portal-transit cooldown every server tick. Has to run for every
+        // player (grinder or not) so the timer doesn't get stuck after the player drops out
+        // of grind mode mid-cooldown.
+        RailGrindHandler.tickPortalTransitCooldown(player);
         // Sustained-overlap kick check. Has to run every tick for every player (grinder or
         // not) because the resulting "crushed" gate also blocks new grind starts — a player
         // standing inside a parked carriage shouldn't be allowed to initiate from there, and
@@ -85,6 +96,22 @@ public class ModEvents
         clearGrindState(event.getEntity());
     }
 
+    /**
+     * Force a rail-grind restart when a player who was grinding crosses any dimension boundary.
+     * Covers the cases the instant-portal mixin enables: vanilla portal flow fires inside
+     * {@code Entity#tick()} (before PlayerTickEvent.Post runs), the player lands in the new
+     * dimension, and this listener picks up the resume. The old GrindState references a
+     * TrackGraph in the old dimension and is dropped inside
+     * {@link RailGrindHandler#handleDimensionChange} — same path also handles command teleports
+     * and any other ChangedDimension fire while grinding.
+     */
+    @SubscribeEvent
+    public static void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer sp)) return;
+        if (!RailGrindHandler.isGrinding(sp)) return;
+        RailGrindHandler.handleDimensionChange(sp);
+    }
+
     private static void clearGrindState(Player player) {
         // Removes from ACTIVE map and broadcasts the false sync packet
         RailGrindHandler.stop(player);
@@ -93,5 +120,28 @@ public class ModEvents
         player.setNoGravity(false);
         player.noPhysics = false;
         player.fallDistance = 0.0F;
+    }
+
+    private static final ResourceLocation BAR_OF_CHOCOLATE = ResourceLocation.fromNamespaceAndPath("create", "bar_of_chocolate");
+
+    /**
+     * Eating a Create bar of chocolate grants Sonic Wind for 1 minute. Hidden particles
+     * (visible=false) so the player doesn't trail effect motes; the icon still shows in the HUD.
+     */
+    @SubscribeEvent
+    public static void onItemUseFinish(LivingEntityUseItemEvent.Finish event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        if (player.level().isClientSide) return;
+        ItemStack stack = event.getItem();
+        if (stack.isEmpty()) return;
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        if (!BAR_OF_CHOCOLATE.equals(id)) return;
+        player.addEffect(new MobEffectInstance(
+                ModEffects.SONIC_WIND,
+                ModEffects.SONIC_WIND_DURATION_TICKS,
+                0,
+                false,
+                false,
+                true));
     }
 }

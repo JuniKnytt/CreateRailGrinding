@@ -1,6 +1,7 @@
 package net.juniknytt.createrailgrinding.rail;
 
 import com.simibubi.create.Create;
+import com.simibubi.create.api.contraption.train.PortalTrackProvider;
 import com.simibubi.create.content.kinetics.chainConveyor.ServerChainConveyorHandler;
 import com.simibubi.create.content.trains.entity.CarriageContraptionEntity;
 import com.simibubi.create.content.trains.graph.TrackEdge;
@@ -14,9 +15,11 @@ import com.simibubi.create.content.trains.track.ITrackBlock;
 import com.simibubi.create.content.trains.track.TrackBlockEntity;
 import com.simibubi.create.content.trains.track.TrackMaterial;
 import net.createmod.catnip.data.Couple;
+import net.createmod.catnip.math.BlockFace;
 import net.juniknytt.createrailgrinding.Config;
 import net.juniknytt.createrailgrinding.RailGrind;
 import net.juniknytt.createrailgrinding.client.BalancingPoseTracker;
+import net.juniknytt.createrailgrinding.effect.ModEffects;
 import net.juniknytt.createrailgrinding.network.GrindAccelInputPayload;
 import net.juniknytt.createrailgrinding.network.RailGrindSyncPayload;
 import net.minecraft.core.BlockPos;
@@ -26,6 +29,7 @@ import net.minecraft.core.SectionPos;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
@@ -143,6 +147,26 @@ public final class RailGrindHandler {
     private static final double LAUNCH_CHARGE_VERTICAL_BONUS_MULT   = 1.0;
     // Rail-grind sparks: base crit particle (spark-shaped) plus a red dust tint layered on at high speed.
     private static final DustParticleOptions RED_SPARK = new DustParticleOptions(new Vector3f(1.0f, 0.0f, 0.0f), 1.0f);
+    // Search radius used to find a rail at a portal exit (cross-dimension transit). Bigger
+    // than the default near-rail snap (1.75) because users are free to place the matching rail
+    // a few blocks off from the exit portal frame, and the "force re-grind after a through-
+    // portal" guarantee should tolerate that slack. 8 blocks comfortably covers a portal frame
+    // plus a couple blocks of approach on the other side; beyond that the chosen rail starts
+    // to feel arbitrary, so the no-rail branch in finishCrossDimRegrind kicks in instead.
+    private static final double PORTAL_REGRIND_SEARCH_RANGE = 8.0;
+    // Post-transit portal cooldown (ticks) — applied after Path 1 cross-dim teleport so vanilla
+    // doesn't try to send the player back through the exit portal if they're still overlapping
+    // it at land time. 80 ticks (~4 s) is conservatively long but still expires before any
+    // realistic re-grind back through the same portal.
+    private static final int PORTAL_REGRIND_COOLDOWN_TICKS = 80;
+    // Per-player post-transit gate that blocks our own instant-portal paths (mixin, Path 1,
+    // graph-hop, end-node adjacency scan) from re-firing immediately after a successful
+    // transit. Vanilla's portalCooldown gets refreshed to Player.getDimensionChangingDelay()
+    // (10 ticks in 1.21.1) by setAsInsidePortal whenever the player keeps overlapping a portal
+    // block — too short to prevent ping-pong when the exit lands the player on or beside the
+    // matching portal frame. This separate window is OUR cooldown and isn't reset by vanilla.
+    private static final Map<UUID, Integer> PORTAL_TRANSIT_COOLDOWN = new ConcurrentHashMap<>();
+    private static final int PORTAL_TRANSIT_COOLDOWN_TICKS = 40;
 
     private RailGrindHandler() {}
 
@@ -285,6 +309,9 @@ public final class RailGrindHandler {
         double position = forward ? loc.position : edge.getLength() - loc.position;
 
         GrindState gs = new GrindState(graph, fromNode, toNode, edge, position);
+        // Sonic Wind boosts the cruise-speed seed before the entry-velocity carry, so a
+        // boosted player snapping onto a rail starts above the unboosted cruise floor.
+        gs.currentSpeed *= ModEffects.sonicWindMultiplier(player);
         // Carry the player's pre-grind momentum into the grind, capped at MAX_STEP rather
         // than TOP_SPEED. Below MAX_STEP, applyTickMotion never scales down the per-tick
         // velocity, so expectedPos stays on the parallel-offset curve and the player tracks
@@ -353,6 +380,268 @@ public final class RailGrindHandler {
         // grind start) while the counter is > 0.
         START_COOLDOWN_REMAINING.put(player.getUUID(), START_COOLDOWN_TICKS);
         syncPose(player, false);
+    }
+
+    /**
+     * True while the player's post-transit cooldown is still active. Set to
+     * {@link #PORTAL_TRANSIT_COOLDOWN_TICKS} by {@link #seedPortalTransitCooldown} after any
+     * mod-driven portal transit; decremented each server tick in
+     * {@link #tickPortalTransitCooldown}; read by the {@code PortalProcessorInstantMixin} to
+     * skip the instant-teleport short-circuit, by {@link #tryPortalTransit} to skip Path-1
+     * detection, and by the graph-hop / end-node-adjacency branches in {@link #tick} to skip
+     * their own teleports. Effectively: once we transit, no further mod-driven transit fires
+     * for the cooldown window — long enough for the player's rail motion to carry them past
+     * the exit portal's AABB and break the ping-pong loop.
+     */
+    public static boolean isOnPostPortalTransitCooldown(Player player) {
+        Integer remaining = PORTAL_TRANSIT_COOLDOWN.get(player.getUUID());
+        return remaining != null && remaining > 0;
+    }
+
+    /** Seeds the post-transit cooldown to its full duration. Called from each transit path. */
+    public static void seedPortalTransitCooldown(Player player) {
+        PORTAL_TRANSIT_COOLDOWN.put(player.getUUID(), PORTAL_TRANSIT_COOLDOWN_TICKS);
+    }
+
+    /**
+     * Decrement the player's post-transit cooldown counter by one and evict at zero. Called
+     * every server tick from {@link net.juniknytt.createrailgrinding.event.ModEvents#onPlayerTick}
+     * for every player (cheap when the entry is absent — single map lookup, early return).
+     */
+    public static void tickPortalTransitCooldown(Player player) {
+        Integer remaining = PORTAL_TRANSIT_COOLDOWN.get(player.getUUID());
+        if (remaining == null) return;
+        int next = remaining - 1;
+        if (next <= 0) PORTAL_TRANSIT_COOLDOWN.remove(player.getUUID());
+        else PORTAL_TRANSIT_COOLDOWN.put(player.getUUID(), next);
+    }
+
+    /**
+     * Try to instant-port a grinding player to the matching rail in another dimension via
+     * Create's {@link PortalTrackProvider} registry. Fires from {@link #tick} when the player
+     * overlaps a Create-registered portal block, before vanilla's {@code PortalProcessor}
+     * counter has a chance to drive the standard transition. The {@link PortalProcessor}
+     * instant-portal mixin handles the same trick for portal blocks Create doesn't know about
+     * — that path lands the player at a vanilla-computed exit, and the dimension-change
+     * listener handles the re-grind there. This path's advantage is that Create's provider
+     * encodes the rail-to-rail mapping, so the exit is positioned where the matching rail
+     * actually is.
+     *
+     * <p>Returns true iff a transit happened (caller should early-return from tick): the old
+     * grind state is gone and {@code ACTIVE} either has a fresh entry for the new dimension
+     * or no entry at all (no rail at the exit). Returns false if no Create-registered portal
+     * block was under the player's feet — in that case the caller continues the grind tick
+     * normally.
+     */
+    private static boolean tryPortalTransit(ServerPlayer sp, GrindState oldState, ServerLevel level) {
+        if (isOnPostPortalTransitCooldown(sp)) return false;
+        BlockPos here = sp.blockPosition();
+        BlockState portalState = level.getBlockState(here);
+        if (!PortalTrackProvider.isSupportedPortal(portalState)) return false;
+
+        // Entry face = the nearest horizontal cardinal of the player's current rail tangent.
+        // Create's provider uses this to disambiguate which side of the portal to map to on
+        // the exit — same convention trains use when their TravellingPoint crosses a portal
+        // edge. Y-component is zeroed because portal blocks (nether, end) are axis-aligned in
+        // the horizontal plane; passing UP/DOWN here would land us with an unusable BlockFace.
+        double edgeLen = oldState.edge.getLength();
+        double t = edgeLen <= 0 ? 0 : Math.min(1.0, Math.max(0.0, oldState.position / edgeLen));
+        Vec3 tangent = sampleTangent(oldState.graph, oldState.edge, t);
+        Vec3 chord = oldState.toNode.getLocation().getLocation()
+                .subtract(oldState.fromNode.getLocation().getLocation());
+        if (tangent.x * chord.x + tangent.z * chord.z < 0) tangent = tangent.scale(-1);
+        Direction entryDir = Direction.getNearest(tangent.x, 0, tangent.z);
+
+        PortalTrackProvider.Exit exit = PortalTrackProvider.getOtherSide(
+                level, new BlockFace(here, entryDir));
+        if (exit == null) return false;
+
+        // Drop the old grind state without seeding the START_COOLDOWN — the post-portal
+        // re-grind in handleDimensionChange should fire on the next tick, not be gated by
+        // the half-second dismount window meant to debounce a manual jump-off.
+        double carryVelocity = oldState.currentSpeed;
+        ACTIVE.remove(sp.getUUID());
+
+        // Land one block past the exit portal in the face direction, with a half-block
+        // vertical bias so the player isn't clipped inside the exit-portal block (which
+        // would re-trigger vanilla portal handling on the very next tick). railgrinding()
+        // re-snaps the player onto the rail bar itself, so this position is only used to
+        // seed the rail-bar side pick and to give findNearestRailLocation a search center.
+        BlockFace exitFace = exit.face();
+        BlockPos exitTargetPos = exitFace.getConnectedPos();
+        Vec3 targetPos = Vec3.atCenterOf(exitTargetPos);
+        float yaw = exitFace.getFace().toYRot();
+        sp.teleportTo(exit.level(), targetPos.x, targetPos.y, targetPos.z, yaw, sp.getXRot());
+        sp.setPortalCooldown(PORTAL_REGRIND_COOLDOWN_TICKS);
+
+        finishCrossDimRegrind(sp, carryVelocity);
+        return true;
+    }
+
+    /**
+     * Called after a cross-dimension teleport (either path 1 — Create-supported portal in
+     * {@link #tryPortalTransit} — or path 2 — vanilla portal flow + {@code PlayerChangedDimensionEvent})
+     * to resume the grind on the other side. Finds the nearest rail to the player's new
+     * position and re-inits the grind with the carried-over speed; if no rail is found
+     * within {@link #PORTAL_REGRIND_SEARCH_RANGE}, cleans up the no-physics / no-gravity
+     * flags so the player doesn't float forever at the exit.
+     */
+    private static void finishCrossDimRegrind(ServerPlayer sp, double carryVelocity) {
+        // Any time this fires, we've just landed from a cross-dim teleport — seed the
+        // post-transit cooldown so the mixin, Path 1, and the graph/adjacency paths all
+        // refuse to fire again until the player's rail motion has carried them clear of the
+        // exit portal's AABB.
+        seedPortalTransitCooldown(sp);
+        TrackGraphLocation newLoc = findNearestRailLocation(
+                sp.level(), sp.position(), PORTAL_REGRIND_SEARCH_RANGE);
+        if (newLoc != null) {
+            // Suppress the grind-start collide sound + dismount-prompt overlay for this
+            // re-grind: the player was already grinding before the portal, so a fresh "you
+            // just mounted" cue would feel like a hiccup instead of a continuation. Consumed
+            // by the syncPose() call inside railgrinding().
+            markNextStartSilent(sp.getUUID());
+            railgrinding(sp, newLoc, sp.position(), carryVelocity);
+            return;
+        }
+        // Exit has no rail in range — release physics-disable flags so the player falls
+        // normally, sync the pose off, and seed the standard fall-immunity window so the
+        // landing arc after a portal exit doesn't kill at speed.
+        sp.setNoGravity(false);
+        sp.noPhysics = false;
+        FALL_DAMAGE_IMMUNITY_TIME.put(sp.getUUID(), sp.level().getGameTime() + FALL_IMMUNITY_TICKS);
+        syncPose(sp, false);
+    }
+
+    /**
+     * Called from {@code ModEvents.onPlayerChangedDimension} when a player who was grinding
+     * just landed in a new dimension via vanilla's portal flow (or any other dimension change
+     * — command teleport, /execute in, etc.). Tears down the old grind state (its TrackGraph
+     * lives in the old dimension and is unreachable from the new level) and attempts to
+     * resume the grind on the new side via {@link #finishCrossDimRegrind}.
+     *
+     * <p>Carries the player's pre-transit grind speed forward as the new grind's
+     * entry-velocity so the cross-dim handoff doesn't feel like a hard stop.
+     */
+    public static void handleDimensionChange(ServerPlayer sp) {
+        GrindState gs = ACTIVE.remove(sp.getUUID());
+        if (gs == null) return;
+        finishCrossDimRegrind(sp, gs.currentSpeed);
+    }
+
+    /**
+     * Move the player across an inter-dimensional graph hop. Called from {@link #tick} after
+     * {@link #advanceJunction} picks a next edge whose {@code fromNode} lives in a different
+     * dimension than the player — Create's track-graph already encodes the rail-to-rail
+     * crossing (see {@link TrackEdge#isInterDimensional}; the boolean is set in the edge ctor
+     * from {@code node1.dimension != node2.dimension}), so the graph IS the source of truth
+     * for which rail-end maps to which dimension. We don't go through {@link PortalTrackProvider}
+     * or vanilla portal flow here — both would be redundant when the graph already says
+     * "continue grinding at this node in that dimension."
+     *
+     * <p>Re-uses the existing {@link GrindState} on the new dimension (already pointing at
+     * the right edge with {@code position = 0}) so the cross-dim handoff is just a player
+     * teleport + flag re-assert + cooldown seed. Skipping {@link #finishCrossDimRegrind}'s
+     * nearest-rail lookup matters: the graph has already chosen the canonical exit edge, and
+     * a free-form proximity scan could grab an unrelated rail on the wrong side of the portal.
+     */
+    private static void teleportThroughGraphHop(ServerPlayer sp, GrindState gs, ResourceKey<Level> targetDim) {
+        ServerLevel newLevel = sp.server.getLevel(targetDim);
+        if (newLevel == null) {
+            // Defensive: the node points at a dimension the server doesn't have loaded. Drop
+            // the grind cleanly rather than leaving the player floating with stale flags.
+            ACTIVE.remove(sp.getUUID());
+            sp.setNoGravity(false);
+            sp.noPhysics = false;
+            syncPose(sp, false);
+            return;
+        }
+        Vec3 targetPos = worldPos(gs).add(0, Y_OFFSET, 0);
+
+        // Clear ACTIVE before teleport so the PlayerChangedDimensionEvent listener treats this
+        // as "not grinding" and skips its own re-grind path — we put gs back ourselves right
+        // after, with its dimension-correct fromNode/toNode/edge already set.
+        ACTIVE.remove(sp.getUUID());
+        sp.teleportTo(newLevel, targetPos.x, targetPos.y, targetPos.z, sp.getYRot(), sp.getXRot());
+        sp.setPortalCooldown(PORTAL_REGRIND_COOLDOWN_TICKS);
+
+        ACTIVE.put(sp.getUUID(), gs);
+        sp.setNoGravity(true);
+        sp.noPhysics = true;
+        sp.fallDistance = 0.0F;
+        sp.setDeltaMovement(Vec3.ZERO);
+        gs.expectedPos = targetPos;
+        gs.prevPos = null;          // suppress this-tick slope sample after the teleport
+        gs.stuckTicks = 0;
+        // The player was already grinding before this hop — suppress the grind-start collide
+        // sound and the dismount prompt so the cross-dim handoff plays as a continuation, not
+        // a fresh mount.
+        markNextStartSilent(sp.getUUID());
+        syncPose(sp, true);
+
+        seedPortalTransitCooldown(sp);
+    }
+
+    /**
+     * Fallback portal-transit when the rail edge ends with no graph continuation. Scans the
+     * six cardinal-adjacent blocks of the end node for a Create-supported portal block; if
+     * found, treats the player as having entered that portal block and teleports via Create's
+     * {@link PortalTrackProvider#getOtherSide}. Handles the "1 block of separation between
+     * rail end and portal block" layout the user described — rails can't share a position
+     * with a portal block, so the natural placement leaves a gap that the graph doesn't span.
+     *
+     * <p>Returns true iff a transit happened (caller should early-return).
+     */
+    private static boolean tryPortalTransitFromNode(ServerPlayer sp, GrindState gs, ServerLevel level) {
+        if (isOnPostPortalTransitCooldown(sp)) return false;
+        Vec3 nodeVec = gs.toNode.getLocation().getLocation();
+        BlockPos nodeBlock = BlockPos.containing(nodeVec);
+        // Prefer the direction the player is travelling — that's where a forward-facing portal
+        // would be — but fall back to the other cardinals so a misaligned setup still teleports.
+        Vec3 chord = gs.toNode.getLocation().getLocation()
+                .subtract(gs.fromNode.getLocation().getLocation());
+        Direction preferredDir = Direction.getNearest(chord.x, 0, chord.z);
+        Direction[] order = orderedDirs(preferredDir);
+        for (Direction dir : order) {
+            BlockPos check = nodeBlock.relative(dir);
+            BlockState state = level.getBlockState(check);
+            if (!PortalTrackProvider.isSupportedPortal(state)) continue;
+            PortalTrackProvider.Exit exit = PortalTrackProvider.getOtherSide(
+                    level, new BlockFace(check, dir));
+            if (exit == null) continue;
+
+            double carryVelocity = gs.currentSpeed;
+            ACTIVE.remove(sp.getUUID());
+            BlockFace exitFace = exit.face();
+            Vec3 targetPos = Vec3.atCenterOf(exitFace.getConnectedPos());
+            float yaw = exitFace.getFace().toYRot();
+            sp.teleportTo(exit.level(), targetPos.x, targetPos.y, targetPos.z, yaw, sp.getXRot());
+            sp.setPortalCooldown(PORTAL_REGRIND_COOLDOWN_TICKS);
+            finishCrossDimRegrind(sp, carryVelocity);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * The four horizontal cardinals with {@code preferred} first, then the other three in
+     * a stable order. Used by {@link #tryPortalTransitFromNode} so a portal directly along
+     * the rail's travel direction wins over one that happens to sit perpendicular to a Y-fork
+     * at the end node. If {@code preferred} isn't horizontal (e.g. nearly-zero chord), falls
+     * back to a stable horizontal order so we still scan all four sides exactly once.
+     */
+    private static Direction[] orderedDirs(Direction preferred) {
+        Direction[] horizontals = new Direction[] {
+                Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST };
+        if (preferred == null || !preferred.getAxis().isHorizontal()) {
+            return horizontals;
+        }
+        Direction[] out = new Direction[4];
+        out[0] = preferred;
+        int i = 1;
+        for (Direction d : horizontals) {
+            if (d != preferred) out[i++] = d;
+        }
+        return out;
     }
 
     /**
@@ -629,7 +918,8 @@ public final class RailGrindHandler {
 
         double chargeRatio = computeChargeRatio(chargeTicks);
         double speedMult  = Config.RAIL_JUMP_MOMENTUM.get();
-        double chargeMult = Config.RAIL_JUMP_CHARGE.get();
+        // Sonic Wind boosts the charge half of the launch only (railJumpMomentum is untouched).
+        double chargeMult = Config.RAIL_JUMP_CHARGE.get() * ModEffects.sonicWindMultiplier(player);
         // railJumpMomentum scales both the horizontal speed-mult and the vertical speed-scale
         // term. railJumpCharge scales both the horizontal and vertical charge-bonus mults.
         // Vertical base launch (LAUNCH_VERTICAL_BASE) is intentionally not scaled — it's the
@@ -786,6 +1076,16 @@ public final class RailGrindHandler {
             return;
         }
 
+        // Rail-grind into a Create-supported portal block → instant cross-dimension teleport
+        // (no vanilla 4-second wait) and immediate re-grind on the matching rail in the exit
+        // dimension. Detection uses Create's own PortalTrackProvider registry, which already
+        // covers vanilla nether/end and any portal a mod has registered via AllPortalTracks —
+        // same list trains use, so the rail-grinder follows wherever Create rails can go.
+        if (player.level() instanceof ServerLevel sl && player instanceof ServerPlayer sp
+                && tryPortalTransit(sp, gs, sl)) {
+            return;
+        }
+
         gs.totalTicks++;
 
 
@@ -890,7 +1190,36 @@ public final class RailGrindHandler {
                 remaining -= Math.max(room, 0);
                 gs.position = edgeLen;
                 if (!advanceJunction(gs, player)) {
+                    // No graph continuation. Before giving up, scan blocks adjacent to the
+                    // end node for a Create-supported portal — handles the "1-block gap
+                    // between rail end and portal block" placement that breaks the graph
+                    // hop because rails and portal blocks can't share a position.
+                    if (player.level() instanceof ServerLevel sl2 && player instanceof ServerPlayer sp2
+                            && tryPortalTransitFromNode(sp2, gs, sl2)) {
+                        return;
+                    }
                     stop(player);
+                    return;
+                }
+                // advanceJunction picked a new edge. If its fromNode is in a different
+                // dimension than the player, we've just stepped onto an inter-dim graph hop
+                // (TrackEdge.interDimensional, set by Create whenever an edge's two nodes
+                // live in different dimensions). Teleport the player across; the same gs
+                // continues on the destination edge.
+                //
+                // No post-transit cooldown gate here on purpose: cooldown is for ping-pong
+                // via overlap-based detection (mixin, Path 1, adjacency scan), which all key
+                // off "player AABB intersects portal block." A graph hop is initiated by
+                // graph traversal — the player would have to deliberately reverse direction
+                // and re-cross the same inter-dim edge to "ping-pong," which is intentional
+                // travel, not a bug. Blocking it would also leave gs pointing at an edge in a
+                // dimension the player isn't in, dragging them through impossible geometry.
+                if (player instanceof ServerPlayer spDim
+                        && !gs.fromNode.getLocation().getDimension().equals(spDim.level().dimension())) {
+                    teleportThroughGraphHop(spDim, gs, gs.fromNode.getLocation().getDimension());
+                    // Bail out of this tick's advance loop: the player's level reference and
+                    // gs.edge geometry now resolve against the new dimension; the rest of
+                    // this tick's work (particles, applyTickMotion) re-runs cleanly next tick.
                     return;
                 }
             }
@@ -902,10 +1231,14 @@ public final class RailGrindHandler {
     private static double computeTargetSpeed(GrindState gs, Player player) {
         double slope = gs.experiencedSlope;  // +up / -down
         boolean crouchAccelerating = isAcceleratingForGrind(player, gs);
+        // Sonic Wind boost (1.0× without the effect): user request only covers the sneak top
+        // speed and the no-sneak cruise here, so the descending-coast branch deliberately
+        // skips it.
+        double sonicMult = ModEffects.sonicWindMultiplier(player);
         double base;
         if (crouchAccelerating) {
             // Sneak: ride at topSpeed with the asymmetric slope cap — descents lift it (DOWNHILL_FACTOR), ascents cut it (UPHILL_FACTOR).
-            base = topSpeed();
+            base = topSpeed() * sonicMult;
             double factor = slope < 0 ? DOWNHILL_FACTOR : UPHILL_FACTOR;
             base *= Math.max(0.0, 1.0 - slope * factor);
         } else if (slope < 0) {
@@ -919,7 +1252,7 @@ public final class RailGrindHandler {
                     + (DOWNHILL_CRUISE_MAX_FRACTION - DOWNHILL_CRUISE_MIN_FRACTION) * steepness);
         } else {
             // No sneak, flat or ascending: cruise pace, with uphill cut.
-            base = CRUISE_SPEED * Config.CRUISE_GRIND_SPEED.get() * Math.max(0.0, 1.0 - slope * UPHILL_FACTOR);
+            base = CRUISE_SPEED * Config.CRUISE_GRIND_SPEED.get() * sonicMult * Math.max(0.0, 1.0 - slope * UPHILL_FACTOR);
         }
 
         if (gs.edge.isTurn()) base *= CURVE_FACTOR;
@@ -928,7 +1261,10 @@ public final class RailGrindHandler {
     }
 
     private static double computeAcceleration(GrindState gs, Player player) {
-        double base = isAcceleratingForGrind(player, gs) ? ACCELERATION * Config.SNEAK_ACCELERATION.get() : ACCELERATION;
+        // Sonic Wind only multiplies the sneak-accel branch (per user request).
+        double base = isAcceleratingForGrind(player, gs)
+                ? ACCELERATION * Config.SNEAK_ACCELERATION.get() * ModEffects.sonicWindMultiplier(player)
+                : ACCELERATION;
         double slope = gs.experiencedSlope;
         if (slope < 0) base *= 1.0 + (-slope) * (DOWNHILL_ACCEL_BOOST - 1.0) * Config.DOWNWARD_MOMENTUM_GAIN.get();
         return base;
@@ -1160,8 +1496,24 @@ public final class RailGrindHandler {
         if (player.level().isClientSide) {
             BalancingPoseTracker.setBalancing(player.getUUID(), grinding);
         } else if (player instanceof ServerPlayer serverPlayer) {
+            // Single-shot per-UUID side-channel: portal-transit paths call markNextStartSilent
+            // right before triggering a grinding=true sync, and we consume the marker here so
+            // the outgoing payload tells the client to skip playCollide and the dismount prompt.
+            // Only consumed when grinding=true (a dismount sync would never want the silent flag
+            // and shouldn't strip a marker meant for the next real start).
+            boolean silent = grinding && SILENT_NEXT_START.remove(player.getUUID());
             PacketDistributor.sendToPlayersTrackingEntityAndSelf(
-                serverPlayer, new RailGrindSyncPayload(player.getUUID(), grinding));
+                serverPlayer, new RailGrindSyncPayload(player.getUUID(), grinding, silent));
         }
+    }
+
+    // See syncPose: portal-driven re-grind paths (finishCrossDimRegrind, teleportThroughGraphHop)
+    // add the player's UUID right before invoking the code that emits the grinding=true sync.
+    // The entry is consumed exactly once on the next such sync — never sticks around to silence
+    // a later, unrelated grind start.
+    private static final java.util.Set<UUID> SILENT_NEXT_START = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    private static void markNextStartSilent(UUID uuid) {
+        SILENT_NEXT_START.add(uuid);
     }
 }

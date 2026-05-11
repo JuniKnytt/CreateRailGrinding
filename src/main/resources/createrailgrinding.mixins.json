@@ -4,11 +4,13 @@
   "compatibilityLevel": "JAVA_21",
   "minVersion": "0.8",
   "mixins": [
-    "PlayerEdgeMixin"
+    "PlayerEdgeMixin",
+    "PortalProcessorInstantMixin"
   ],
   "client": [
     "client.PlayerModelMixin",
-    "client.JumpChargeCameraMixin"
+    "client.JumpChargeCameraMixin",
+    "client.HumanoidArmorLayerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

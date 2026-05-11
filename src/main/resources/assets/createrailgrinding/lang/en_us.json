@@ -2,5 +2,19 @@
     "createrailgrinding.dismount_prompt": "Press %1$s to Dismount",
     "key.categories.createrailgrinding": "Rail Grinding Overrides (Toggled in Client Config)",
     "key.createrailgrinding.rail_mount_override": "Mount Override",
-    "key.createrailgrinding.grind_crouch_accelerate_override": "Crouch Accelerate Override"
+    "key.createrailgrinding.grind_crouch_accelerate_override": "Crouch Accelerate Override",
+    "effect.createrailgrinding.railgrindboost": "Sonic Wind",
+    "effect.createrailgrinding.railgrindboost.description": "A tasty sugary treat that _Improves_ your _Rail-Grinding Skills._",
+    "effect.createrailgrinding.railgrindboost.condition": "When Eaten",
+    "effect.createrailgrinding.railgrindboost.behaviour": "Grants _Sonic_ _Wind_, boosting _grind speed_, _acceleration_, and _jump strength_.",
+
+    "createrailgrinding.ponder.rail_grinding_intro.header": "Rail-Grinding",
+    "createrailgrinding.ponder.rail_grinding_intro.text_1": "Diving Boots are suitable Grind Shoes and can used for Rail-Grinding",
+    "createrailgrinding.ponder.rail_grinding_intro.text_2": "Right-click Train Tracks with an empty hand to start Rail-Grinding",
+    "createrailgrinding.ponder.rail_grinding_intro.text_3": "Right-click Train Tracks with an empty hand to stop Rail-Grinding",
+    "createrailgrinding.ponder.rail_grinding_intro.text_4": "Sneak and Jump near Train Tracks is another way to start Rail-Grinding",
+    "createrailgrinding.ponder.rail_grinding_intro.text_5": "Hold Sneak to Speed up",
+    "createrailgrinding.ponder.rail_grinding_intro.text_6": "Hold and Release Jump to leap off Rails",
+    "createrailgrinding.ponder.rail_grinding_intro.text_7": "Holding Shift+Sneak will automatically make you latch on to Rails",
+    "createrailgrinding.ponder.rail_grinding_intro.text_8": "Fall Damage is negated and Momentum is maintained when landing on Rails"
 }
