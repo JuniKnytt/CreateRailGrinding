@@ -5,6 +5,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.juniknytt.createrailgrinding.Config;
 import net.juniknytt.createrailgrinding.RailGrind;
+import net.juniknytt.createrailgrinding.network.RailGrindDebugSyncPayload;
 import net.juniknytt.createrailgrinding.rail.RailGrindHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
@@ -22,11 +23,14 @@ import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
  *  - red box at the spline centerline (raw rail point — what the rail topology says)
  *  - blue box at the player snap target (centerline + lateral rail-bar offset + Y hover offset
  *    — what RailGrindHandler.applyTickMotion() is actually driving the player toward).
- * Both come from RailGrindHandler.getGrindFrame, so the blue box does NOT read the player's
- * position; it visualizes the snap-target the handler computes each tick.
  *
- * Reads RailGrindHandler.ACTIVE directly, so it only renders in single-player /
- * integrated-server (no client→server state sync).
+ * <p>Data sources in priority order:
+ *  <ol>
+ *      <li>{@link RailGrindDebugSyncCache} — server is broadcasting debug snapshots (server
+ *          config {@code syncDebugToClients=true}); needed on dedicated server.</li>
+ *      <li>{@link RailGrindHandler#getGrindFrame} — only works on integrated server because
+ *          the ACTIVE map lives in the same JVM as the client there.</li>
+ *  </ol>
  */
 @EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
 public final class RailGrindDebugRenderer {
@@ -47,12 +51,22 @@ public final class RailGrindDebugRenderer {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
 
-        RailGrindHandler.GrindFrame frame = RailGrindHandler.getGrindFrame(mc.player);
-        if (frame == null) return;
-
-        Vec3 origin = frame.origin();
-        Vec3 tangent = frame.tangent();
-        Vec3 snap = frame.snapTarget();
+        Vec3 origin;
+        Vec3 tangent;
+        Vec3 snap;
+        RailGrindDebugSyncPayload synced = RailGrindDebugSyncCache.getFresh();
+        if (synced != null) {
+            if (!synced.hasGrindState()) return;
+            origin = new Vec3(synced.originX(), synced.originY(), synced.originZ());
+            tangent = new Vec3(synced.tangentX(), synced.tangentY(), synced.tangentZ());
+            snap = new Vec3(synced.snapX(), synced.snapY(), synced.snapZ());
+        } else {
+            RailGrindHandler.GrindFrame frame = RailGrindHandler.getGrindFrame(mc.player);
+            if (frame == null) return;
+            origin = frame.origin();
+            tangent = frame.tangent();
+            snap = frame.snapTarget();
+        }
         Vec3 cam = event.getCamera().getPosition();
 
         // Yaw + pitch derived so local +Z aligns with the tangent.

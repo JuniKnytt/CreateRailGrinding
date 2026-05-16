@@ -8,6 +8,12 @@
     "effect.createrailgrinding.railgrindboost.condition": "When Eaten",
     "effect.createrailgrinding.railgrindboost.behaviour": "Grants _Sonic_ _Wind_, boosting _grind speed_, _acceleration_, and _jump strength_.",
 
+    "enchantment.createrailgrinding.rail_grinder": "Rail Grinder",
+
+    "subtitles.createrailgrinding.grind_collide": "Clank",
+    "subtitles.createrailgrinding.grind_slow_loop": "Sliding",
+    "subtitles.createrailgrinding.grind_fast_loop": "Grinding",
+
     "createrailgrinding.ponder.rail_grinding_intro.header": "Rail-Grinding",
     "createrailgrinding.ponder.rail_grinding_intro.text_1": "Diving Boots are suitable Grind Shoes and can used for Rail-Grinding",
     "createrailgrinding.ponder.rail_grinding_intro.text_2": "Right-click Train Tracks with an empty hand to start Rail-Grinding",

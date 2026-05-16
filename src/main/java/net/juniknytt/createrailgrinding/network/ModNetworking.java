@@ -18,5 +18,20 @@ public final class ModNetworking {
             RailGrindSyncPayload.STREAM_CODEC,
             ClientPayloadHandler::handleSync
         );
+        registrar.playToClient(
+            RailGrindDebugSyncPayload.TYPE,
+            RailGrindDebugSyncPayload.STREAM_CODEC,
+            ClientPayloadHandler::handleDebugSync
+        );
+        registrar.playToClient(
+            RailGrindTargetPayload.TYPE,
+            RailGrindTargetPayload.STREAM_CODEC,
+            ClientPayloadHandler::handleTarget
+        );
+        registrar.playToClient(
+            RailGrindLeanSyncPayload.TYPE,
+            RailGrindLeanSyncPayload.STREAM_CODEC,
+            ClientPayloadHandler::handleLeanSync
+        );
     }
 }

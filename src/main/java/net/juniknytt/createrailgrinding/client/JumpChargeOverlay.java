@@ -20,8 +20,6 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
-import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 
 /**
  * Replicates Create's "hold space to approach station" pipe-bar prompt, repurposed for the
@@ -41,7 +39,9 @@ import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
  * launch impulse in {@link RailGrindHandler#stopWithLaunch}.
  */
 public final class JumpChargeOverlay {
-    private static final ResourceLocation OVERLAY_ID =
+    // Package-private so GrindSpeedometerOverlay can register itself above this layer,
+    // keeping the bar visually beneath the speedometer + travel-direction arrow.
+    static final ResourceLocation OVERLAY_ID =
         ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "jump_charge_bar");
 
     // Same 30-segment bar Create uses in CarriageContraptionEntity#control's spaceDown branch.
@@ -65,15 +65,8 @@ public final class JumpChargeOverlay {
 
     private JumpChargeOverlay() {}
 
-    @EventBusSubscriber(modid = RailGrind.MODID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
-    public static final class ModBusEvents {
-        @SubscribeEvent
-        public static void onRegisterGuiLayers(RegisterGuiLayersEvent event) {
-            // Above EXPERIENCE_BAR so the bar sits in the same vertical slot Create's prompt
-            // uses (above the hotbar) without fighting the speedometer overlay's anchor.
-            event.registerAbove(VanillaGuiLayers.EXPERIENCE_BAR, OVERLAY_ID, JumpChargeOverlay::render);
-        }
-    }
+    // GUI-layer registration lives in GrindSpeedometerOverlay so the two layers can be ordered
+    // deterministically (jump charge bar registered first, speedometer registered above it).
 
     @EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
     public static final class GameBusEvents {
@@ -136,7 +129,7 @@ public final class JumpChargeOverlay {
         return (r << 16) | (g << 8) | b;
     }
 
-    private static void render(GuiGraphics graphics, DeltaTracker deltaTracker) {
+    static void render(GuiGraphics graphics, DeltaTracker deltaTracker) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.options.hideGui) return;
         if (mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.SPECTATOR) return;

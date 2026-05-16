@@ -62,4 +62,15 @@ config="${mod_id}.mixins.json"
     ordering="NONE"
     side="BOTH"
 
+# Sable (Create Aeronautics' sublevel/physics engine). Optional — runtime compat only.
+# AFTER ordering ensures Sable's SubLevelContainer is registered before our rail-grind code
+# would ever query it via the compat shim. The shim itself is gated by Mods.SABLE.isLoaded()
+# at every call site, so this entry just hints the load order; the mod runs fine standalone.
+[[dependencies.${mod_id}]]
+    modId="sable"
+    type="optional"
+    versionRange="[1.2.2,)"
+    ordering="AFTER"
+    side="BOTH"
+
 

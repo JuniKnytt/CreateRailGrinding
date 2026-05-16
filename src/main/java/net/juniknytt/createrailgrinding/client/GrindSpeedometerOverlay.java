@@ -49,7 +49,8 @@ public final class GrindSpeedometerOverlay {
         ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "grind_speedometer");
 
     private static final int BAR_SEGMENTS = 18;        // Create's TrainHUD divides the bar into 18 stops
-    private static final float CHASE_SPEED = 0.5f;     // matches TrainHUD.tick — 50% toward target per tick
+    private static final float BAR_CHASE_SPEED = 0.3f; // softer than TrainHUD's 0.5 — grind speed swings harder than a train, so easing keeps the segment-pop from feeling snappy
+    private static final float ARROW_CHASE_SPEED = 0.4f;
     private static final float ARROW_SNAP_DEG = 22.5f; // PLACEMENT_INDICATOR_SHEET has 16 frames over 360°
 
     /** Bar fill in [0, 1], chased toward an 18-segment snapped target. */
@@ -67,7 +68,11 @@ public final class GrindSpeedometerOverlay {
             // speedometer sits in their place instead of overlapping.
             event.wrapLayer(VanillaGuiLayers.EXPERIENCE_BAR, GrindSpeedometerOverlay::wrapHidden);
             event.wrapLayer(VanillaGuiLayers.JUMP_METER,     GrindSpeedometerOverlay::wrapHidden);
-            event.registerAbove(VanillaGuiLayers.EXPERIENCE_BAR, OVERLAY_ID, GrindSpeedometerOverlay::render);
+            // Register the jump charge bar first, then the speedometer above it, so the
+            // speedometer frame + travel-direction arrow always draw on top of the charge bar
+            // when both are visible (the two share the bottom-center anchor and would overlap).
+            event.registerAbove(VanillaGuiLayers.EXPERIENCE_BAR, JumpChargeOverlay.OVERLAY_ID, JumpChargeOverlay::render);
+            event.registerAbove(JumpChargeOverlay.OVERLAY_ID, OVERLAY_ID, GrindSpeedometerOverlay::render);
         }
     }
 
@@ -89,16 +94,16 @@ public final class GrindSpeedometerOverlay {
             // +0.05 padding (lifted from Create's TrainHUD) so a tiny non-zero speed still lights a segment.
             double value = Mth.clamp(speedMs / topSpeedMs + 0.05, 0.0, 1.0);
             double snapped = (int) (value * BAR_SEGMENTS) / (double) BAR_SEGMENTS;
-            displayedSpeed.chase(snapped, CHASE_SPEED, Chaser.EXP);
+            displayedSpeed.chase(snapped, BAR_CHASE_SPEED, Chaser.EXP);
 
             Vec3 vel = player.getDeltaMovement();
             if (vel.x * vel.x + vel.z * vel.z > 1.0e-4) {
                 float yaw = (float) Math.toDegrees(Math.atan2(-vel.x, vel.z));
-                displayedTravelYaw.chase(yaw, CHASE_SPEED, Chaser.EXP);
+                displayedTravelYaw.chase(yaw, ARROW_CHASE_SPEED, Chaser.EXP);
             }
         } else {
             // Drain the bar between grinds so the next one starts from empty rather than mid-fill.
-            displayedSpeed.chase(0.0, CHASE_SPEED, Chaser.EXP);
+            displayedSpeed.chase(0.0, BAR_CHASE_SPEED, Chaser.EXP);
         }
         displayedSpeed.tickChaser();
         displayedTravelYaw.tickChaser();

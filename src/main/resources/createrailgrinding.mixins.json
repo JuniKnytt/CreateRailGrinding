@@ -4,13 +4,18 @@
   "compatibilityLevel": "JAVA_21",
   "minVersion": "0.8",
   "mixins": [
+    "LivingEntityFallFlyingMixin",
     "PlayerEdgeMixin",
-    "PortalProcessorInstantMixin"
+    "PlayerNoPhysicsTickMixin",
+    "PortalProcessorInstantMixin",
+    "ServerMovePacketMixin"
   ],
   "client": [
     "client.PlayerModelMixin",
     "client.JumpChargeCameraMixin",
-    "client.HumanoidArmorLayerMixin"
+    "client.CameraLeanMixin",
+    "client.HumanoidArmorLayerMixin",
+    "client.LivingEntityRendererTiltMixin"
   ],
   "injectors": {
     "defaultRequire": 1
