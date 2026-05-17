@@ -8,6 +8,7 @@ import com.simibubi.create.foundation.item.TooltipHelper;
 import net.createmod.catnip.lang.FontHelper;
 import net.juniknytt.createrailgrinding.RailGrind;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -54,18 +55,18 @@ public final class DivingBootsTooltip {
 
         List<Component> tooltip = event.getToolTip();
         List<Component> header = TooltipHelper.cutStringTextComponent(
-                "When Near Rails",
+                I18n.get("item.createrailgrinding.diving_boots.tooltip.condition1"),
                 FontHelper.Palette.GRAY_AND_WHITE);
         List<Component> description = TooltipHelper.cutStringTextComponent(
-                "Grants the ability to _grind_ on the rails of _Train Tracks._ _Interact (R-Click)_ with _Train Tracks_ on an empty hand, or hold _Sneak_ and _Jump_ while near _Train Tracks._",
+                I18n.get("item.createrailgrinding.diving_boots.tooltip.behaviour1"),
                 FontHelper.Palette.STANDARD_CREATE.primary(),
                 FontHelper.Palette.STANDARD_CREATE.highlight(),
                 1);
         List<Component> header2 = TooltipHelper.cutStringTextComponent(
-                "While Rail Grinding",
+                I18n.get("item.createrailgrinding.diving_boots.tooltip.condition2"),
                 FontHelper.Palette.GRAY_AND_WHITE);
         List<Component> description2 = TooltipHelper.cutStringTextComponent(
-                "Hold _Sneak_ to accelerate. Press _Jump_ to trick off the rail. _Interact (R-Click)_ the rail to stop.",
+                I18n.get("item.createrailgrinding.diving_boots.tooltip.behaviour2"),
                 FontHelper.Palette.STANDARD_CREATE.primary(),
                 FontHelper.Palette.STANDARD_CREATE.highlight(),
                 1);

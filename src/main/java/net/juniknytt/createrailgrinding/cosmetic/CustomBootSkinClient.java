@@ -9,9 +9,12 @@ import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.client.resources.model.ModelResourceLocation;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.ArmorItem;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.api.distmarker.Dist;
@@ -24,7 +27,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Wires the inventory icon swap for renamed diving boots. Implementation note:
+ * Wires the inventory icon swap for renamed rail-grind boots. Implementation note:
  * an earlier attempt overrode Create's model JSONs at {@code assets/create/models/item/...}
  * inside our own jar, expecting NeoForge's mod resource pack to load ours after Create's.
  * That stopped working in practice — Create's JSON kept winning even though we depend on
@@ -35,10 +38,15 @@ import java.util.Map;
  *      model under the {@code standalone} variant so it gets baked even though no item
  *      registration references it.
  *   2. {@link ModelEvent.ModifyBakingResult} replaces the {@code #inventory} BakedModel
- *      for both Create diving boots with a {@link DelegatingBakedModel} whose sole
- *      difference from the original is its {@link BakedModel#getOverrides()} — the
- *      anonymous {@link ItemOverrides} there checks {@link CustomBootSkin#matches(ItemStack)}
- *      and returns either the custom model or the original's own override resolution.
+ *      for EVERY foot-armor item (every {@link ArmorItem} of type {@link ArmorItem.Type#BOOTS})
+ *      with a {@link DelegatingBakedModel} whose sole difference from the original is its
+ *      {@link BakedModel#getOverrides()} — the anonymous {@link ItemOverrides} there checks
+ *      {@link CustomBootSkin#matches(ItemStack)} and returns either the custom model or the
+ *      original's own override resolution. Installing on every boot is unconditional; the
+ *      delegator is a no-op pass-through for stacks that fail {@code matches()}, so iron /
+ *      diamond / modded boots show their original icon unless they're enchanted with Rail
+ *      Rider AND renamed to one of {@link CustomBootSkin#NAMES}. Diving boots covered too
+ *      via Routine A (no enchantment required).
  *
  * The armor-texture mixin lives separately in
  * {@code mixin/client/HumanoidArmorLayerMixin} and uses the same matcher.
@@ -49,11 +57,6 @@ public final class CustomBootSkinClient {
 
     private static final ModelResourceLocation CUSTOM_MODEL = ModelResourceLocation.standalone(
             ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "item/custom_diving_boots"));
-
-    private static final ModelResourceLocation[] TARGETS = new ModelResourceLocation[] {
-            ModelResourceLocation.inventory(ResourceLocation.fromNamespaceAndPath("create", "copper_diving_boots")),
-            ModelResourceLocation.inventory(ResourceLocation.fromNamespaceAndPath("create", "netherite_diving_boots")),
-    };
 
     @SubscribeEvent
     public static void onRegisterAdditional(ModelEvent.RegisterAdditional event) {
@@ -68,13 +71,15 @@ public final class CustomBootSkinClient {
             RailGrind.LOGGER.warn("CustomBootSkin: standalone model not baked, skin swap disabled");
             return;
         }
-        for (ModelResourceLocation target : TARGETS) {
-            BakedModel original = models.get(target);
-            if (original == null) {
-                RailGrind.LOGGER.warn("CustomBootSkin: target model {} missing, skipping", target);
-                continue;
-            }
-            models.put(target, new DelegatingBakedModel(original, custom));
+        for (Item item : BuiltInRegistries.ITEM) {
+            if (!(item instanceof ArmorItem armor)) continue;
+            if (armor.getType() != ArmorItem.Type.BOOTS) continue;
+            ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
+            if (itemId == null) continue;
+            ModelResourceLocation modelKey = ModelResourceLocation.inventory(itemId);
+            BakedModel original = models.get(modelKey);
+            if (original == null) continue;
+            models.put(modelKey, new DelegatingBakedModel(original, custom));
         }
     }
 

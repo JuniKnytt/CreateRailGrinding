@@ -2,7 +2,6 @@ package net.juniknytt.createrailgrinding.event;
 
 import net.juniknytt.createrailgrinding.Config;
 import net.juniknytt.createrailgrinding.RailGrind;
-import net.juniknytt.createrailgrinding.cosmetic.CustomBootSkin;
 import net.juniknytt.createrailgrinding.effect.ModEffects;
 import net.juniknytt.createrailgrinding.enchantment.ModEnchantments;
 import net.juniknytt.createrailgrinding.rail.RailGrindHandler;
@@ -17,7 +16,6 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.AnvilUpdateEvent;
 import net.neoforged.neoforge.event.entity.EntityTeleportEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEquipmentChangeEvent;
@@ -231,25 +229,6 @@ public class ModEvents
      * Eating a Create bar of chocolate grants Sonic Wind for 1 minute. Hidden particles
      * (visible=false) so the player doesn't trail effect motes; the icon still shows in the HUD.
      */
-    /**
-     * Refuse anvil operations that would add the Rail Grinder enchantment onto an item in the
-     * {@code createrailgrinding:is_diving_boots} tag. Diving boots already grant rail-grinding
-     * natively, so stacking the enchantment on top would be redundant — and the user has asked
-     * us to block the combination outright. Triggers when the LEFT input is tagged diving boots
-     * and the would-be output gained Rail Grinder relative to the LEFT input (so legitimate
-     * repair of an already-enchanted creative-spawned pair still works).
-     */
-    @SubscribeEvent
-    public static void onAnvilUpdateBlockRailGrinderOnDivingBoots(AnvilUpdateEvent event) {
-        ItemStack left = event.getLeft();
-        if (left.isEmpty() || !left.is(CustomBootSkin.IS_DIVING_BOOTS)) return;
-        ItemStack output = event.getOutput();
-        if (output.isEmpty()) return;
-        if (ModEnchantments.hasRailGrinder(output) && !ModEnchantments.hasRailGrinder(left)) {
-            event.setOutput(ItemStack.EMPTY);
-        }
-    }
-
     @SubscribeEvent
     public static void onItemUseFinish(LivingEntityUseItemEvent.Finish event) {
         if (!(event.getEntity() instanceof Player player)) return;

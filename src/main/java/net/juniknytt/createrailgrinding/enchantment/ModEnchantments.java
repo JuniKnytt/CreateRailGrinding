@@ -3,6 +3,7 @@ package net.juniknytt.createrailgrinding.enchantment;
 import com.simibubi.create.content.equipment.armor.DivingBootsItem;
 import net.juniknytt.createrailgrinding.RailGrind;
 import net.minecraft.core.Holder;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -10,18 +11,32 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 
 public final class ModEnchantments {
-    public static final ResourceKey<Enchantment> RAIL_GRINDER = ResourceKey.create(
+    public static final ResourceKey<Enchantment> RAILGRIND_ENCHANTMENT = ResourceKey.create(
             Registries.ENCHANTMENT,
-            ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "rail_grinder"));
+            ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "railgrind_enchantment"));
+
+    /** Loose presence check: matches any holder whose ResourceKey location equals our id, on
+     *  either the active enchantments component or the stored-enchantments component (books).
+     *  Does NOT require Holder identity / Reference instance equality — only the registry id. */
+    private static final ResourceLocation RAILGRIND_ENCHANTMENT_ID = RAILGRIND_ENCHANTMENT.location();
 
     private ModEnchantments() {}
 
-    public static boolean hasRailGrinder(ItemStack stack) {
+    public static boolean hasRailgrindEnchantment(ItemStack stack) {
         if (stack.isEmpty()) return false;
-        for (Holder<Enchantment> h : stack.getEnchantments().keySet()) {
-            if (h.is(RAIL_GRINDER)) return true;
+        if (containsRailgrind(stack.getEnchantments())) return true;
+        ItemEnchantments stored = stack.get(DataComponents.STORED_ENCHANTMENTS);
+        return stored != null && containsRailgrind(stored);
+    }
+
+    private static boolean containsRailgrind(ItemEnchantments enchantments) {
+        for (Holder<Enchantment> h : enchantments.keySet()) {
+            if (h.unwrapKey().map(ResourceKey::location).filter(RAILGRIND_ENCHANTMENT_ID::equals).isPresent()) {
+                return true;
+            }
         }
         return false;
     }
@@ -29,7 +44,7 @@ public final class ModEnchantments {
     public static boolean isRailGrindBoots(ItemStack stack) {
         if (stack.isEmpty()) return false;
         if (stack.getItem() instanceof DivingBootsItem) return true;
-        return hasRailGrinder(stack);
+        return hasRailgrindEnchantment(stack);
     }
 
     public static boolean isWearingRailGrindBoots(Player player) {

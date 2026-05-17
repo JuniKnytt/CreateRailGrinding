@@ -1,6 +1,7 @@
 package net.juniknytt.createrailgrinding.cosmetic;
 
 import net.juniknytt.createrailgrinding.RailGrind;
+import net.juniknytt.createrailgrinding.enchantment.ModEnchantments;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
@@ -10,14 +11,24 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Cosmetic skin gate for rail-grind boots renamed in an anvil. A stack qualifies when
- * it (a) is in the {@code createrailgrinding:is_diving_boots} item tag — Create's two
- * diving boots are added by our tag file, and addons can extend it via datapack — and
- * (b) carries a custom hover name matching one of {@link #NAMES} (case-insensitive,
- * trimmed). Both checks live in {@link #matches(ItemStack)}.
+ * Cosmetic skin gate for rail-grind boots renamed in an anvil. The skin applies through
+ * either of two independent routines — {@link #matches(ItemStack)} is the OR of the two
+ * so callers can stay agnostic, but the routines themselves are kept separate so each
+ * can evolve on its own.
  *
- * Append new aliases to {@link #NAMES}. Comparison lower-cases via {@link Locale#ROOT}
- * to keep the match locale-independent.
+ *   Routine A — {@link #matchesDivingBoots(ItemStack)}:
+ *     Stack is in tag {@code #createrailgrinding:is_diving_boots} (Create's two diving
+ *     boots by default; addons can extend via datapack) AND has a matching custom name.
+ *     This is the original cosmetic path — diving boots get the skin from a rename alone.
+ *
+ *   Routine B — {@link #matchesRailgrindEnchanted(ItemStack)}:
+ *     Stack carries the rail-grind enchantment ({@code createrailgrinding:railgrind_enchantment})
+ *     AND has a matching custom name. Lets ANY foot armor — iron, leather, modded — opt
+ *     into the skin once the player has applied Rail Rider via the enchanting table or anvil.
+ *
+ * Custom-name check is shared by {@link #hasMatchingName(ItemStack)}. Comparison
+ * lower-cases via {@link Locale#ROOT} so the match is locale-independent. Append new
+ * aliases to {@link #NAMES}.
  */
 public final class CustomBootSkin {
     private CustomBootSkin() {}
@@ -77,8 +88,24 @@ public final class CustomBootSkin {
     );
 
     public static boolean matches(ItemStack stack) {
+        return matchesDivingBoots(stack) || matchesRailgrindEnchanted(stack);
+    }
+
+    /** Routine A: diving boots get the skin from a rename alone. */
+    public static boolean matchesDivingBoots(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return false;
         if (!stack.is(IS_DIVING_BOOTS)) return false;
+        return hasMatchingName(stack);
+    }
+
+    /** Routine B: any boots get the skin from a rename once enchanted with Rail Rider. */
+    public static boolean matchesRailgrindEnchanted(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return false;
+        if (!hasMatchingName(stack)) return false;
+        return ModEnchantments.hasRailgrindEnchantment(stack);
+    }
+
+    private static boolean hasMatchingName(ItemStack stack) {
         if (!stack.has(net.minecraft.core.component.DataComponents.CUSTOM_NAME)) return false;
         String name = stack.getHoverName().getString().trim().toLowerCase(Locale.ROOT);
         return NAMES.contains(name);
