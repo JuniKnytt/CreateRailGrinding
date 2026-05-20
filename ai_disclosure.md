@@ -1,6 +1,6 @@
 ## AI Disclaimer
 
-This project uses AI-assisted development tools.
+This project uses AI-assisted development tools for code.
 **NO AI-generated Assets were used. All testing, building, and QA was done by humans.**
 
 **Tools**
