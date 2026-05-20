@@ -33,5 +33,10 @@ public final class ModNetworking {
             RailGrindLeanSyncPayload.STREAM_CODEC,
             ClientPayloadHandler::handleLeanSync
         );
+        registrar.playToClient(
+            GrindParticleBurstPayload.TYPE,
+            GrindParticleBurstPayload.STREAM_CODEC,
+            ClientPayloadHandler::handleParticleBurst
+        );
     }
 }
