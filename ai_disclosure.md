@@ -28,7 +28,7 @@ AI agent operated semi-autonomously across multi-step tasks with implementation 
 
 ### Accountability
 
-The human author(s) are solely responsible for the content, accuracy, and fitness-for-purpose of this project.
+The human author(s) are solely responsible for the content, accuracy, and fitness-for-purpose of this project. All published code has been reviewed for highest quality possible.
 
 ---
 *Last updated: 2026-05-19 · Generated with [ai-disclaimer](https://github.com/j23n/ai-disclaimer)*
