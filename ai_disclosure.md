@@ -24,7 +24,7 @@ Human and AI co-author decisions; human reviews all output.
 
 ### Process
 
-AI agent operated autonomously across multi-step tasks. Human reviewed diffs, resolved conflicts, and approved merges.
+AI agent operated semi-autonomously across multi-step tasks with implementation of human made design. Human reviewed diffs, resolved conflicts, and approved merges.
 
 ### Accountability
 
