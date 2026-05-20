@@ -13,21 +13,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
-/**
- * Redirects the armor texture lookup inside
- * {@link HumanoidArmorLayer#renderArmorPiece} so renamed rail-grind boots render
- * with our custom layer textures instead of Create's vanilla diving-boots layer.
- *
- * Vanilla path: {@code ClientHooks.getArmorTexture(...)} returns
- * {@code create:textures/models/armor/copper_diving_layer_1.png} (or netherite). We
- * re-route to {@code createrailgrinding:textures/models/armor/custom_diving_layer_1.png}
- * (or layer_2 for the LEGS pass — boots only render the FEET slot, so layer_2 is
- * defensive coverage in case some addon repurposes the model).
- *
- * Match gate is {@link CustomBootSkin#matches(ItemStack)} — same gate as the inventory
- * icon swap. Falls through to the original texture when the stack doesn't qualify, so
- * non-renamed boots and unrelated armor pieces are untouched.
- */
 @Mixin(HumanoidArmorLayer.class)
 public abstract class HumanoidArmorLayerMixin {
 

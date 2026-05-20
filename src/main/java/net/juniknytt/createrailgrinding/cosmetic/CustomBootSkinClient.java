@@ -26,31 +26,6 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Wires the inventory icon swap for renamed rail-grind boots. Implementation note:
- * an earlier attempt overrode Create's model JSONs at {@code assets/create/models/item/...}
- * inside our own jar, expecting NeoForge's mod resource pack to load ours after Create's.
- * That stopped working in practice — Create's JSON kept winning even though we depend on
- * Create — so we now do the swap programmatically against the model registry.
- *
- * Pipeline:
- *   1. {@link ModelEvent.RegisterAdditional} side-loads our {@code createrailgrinding:item/custom_diving_boots}
- *      model under the {@code standalone} variant so it gets baked even though no item
- *      registration references it.
- *   2. {@link ModelEvent.ModifyBakingResult} replaces the {@code #inventory} BakedModel
- *      for EVERY foot-armor item (every {@link ArmorItem} of type {@link ArmorItem.Type#BOOTS})
- *      with a {@link DelegatingBakedModel} whose sole difference from the original is its
- *      {@link BakedModel#getOverrides()} — the anonymous {@link ItemOverrides} there checks
- *      {@link CustomBootSkin#matches(ItemStack)} and returns either the custom model or the
- *      original's own override resolution. Installing on every boot is unconditional; the
- *      delegator is a no-op pass-through for stacks that fail {@code matches()}, so iron /
- *      diamond / modded boots show their original icon unless they're enchanted with Rail
- *      Rider AND renamed to one of {@link CustomBootSkin#NAMES}. Diving boots covered too
- *      via Routine A (no enchantment required).
- *
- * The armor-texture mixin lives separately in
- * {@code mixin/client/HumanoidArmorLayerMixin} and uses the same matcher.
- */
 @EventBusSubscriber(modid = RailGrind.MODID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public final class CustomBootSkinClient {
     private CustomBootSkinClient() {}
@@ -83,11 +58,6 @@ public final class CustomBootSkinClient {
         }
     }
 
-    /**
-     * Pass-through wrapper. We only care about overriding {@link #getOverrides()}; every other
-     * call routes to the original Create-baked model so quads, transforms, particle icon, and
-     * GUI flags stay identical when no skin is active.
-     */
     private static final class DelegatingBakedModel implements BakedModel {
         private final BakedModel original;
         private final BakedModel customModel;

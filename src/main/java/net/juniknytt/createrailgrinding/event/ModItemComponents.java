@@ -11,9 +11,6 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.ModifyDefaultComponentsEvent;
 
-// Mod-bus event hooks that patch other mods' item components at registration. Lives in
-// event/ alongside ModEvents but uses Bus.MOD because ModifyDefaultComponentsEvent is a
-// mod-bus event.
 @EventBusSubscriber(modid = RailGrind.MODID, bus = EventBusSubscriber.Bus.MOD)
 public final class ModItemComponents {
     private static final ResourceLocation BAR_OF_CHOCOLATE =
@@ -21,11 +18,6 @@ public final class ModItemComponents {
 
     private ModItemComponents() {}
 
-    /**
-     * Flip {@code canAlwaysEat=true} on Create's bar of chocolate so it can be eaten at full
-     * hunger. Rebuilds the {@link FoodProperties} record with existing nutrition/saturation/
-     * eatSeconds/effects preserved — only the flag changes.
-     */
     @SubscribeEvent
     public static void onModifyDefaultComponents(ModifyDefaultComponentsEvent event) {
         Item bar = BuiltInRegistries.ITEM.get(BAR_OF_CHOCOLATE);

@@ -21,52 +21,25 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 
-/**
- * Replicates Create's "hold space to approach station" pipe-bar prompt, repurposed for the
- * rail-grind dismount jump-charge. Renders only while the local player is grinding and a
- * charge is in progress (jump pressed during the grind, not yet released). The bar's filled
- * segment grows from 0 to 30 pipes over the configured charge window; the filled-portion
- * color interpolates from the same gold the Create bar starts at to the same green it ends
- * at, and the empty-portion color matches Create's dim-gray empty segments.
- *
- * <p>The frame textures (TRAIN_PROMPT_L / TRAIN_PROMPT / TRAIN_PROMPT_R), prompt-size lerp
- * speed, vertical offset, and centered anchoring are all lifted from Create's TrainHUD prompt
- * rendering so the visual is indistinguishable from the conductor's approach-station prompt.
- *
- * <p>State is read from {@link ClientInputHandler#isCharging()} /
- * {@link ClientInputHandler#getChargeHeldTicks()} — purely client-side, no server sync needed
- * during the charge. The released duration becomes a charge multiplier on the speed-based
- * launch impulse in {@link RailGrindHandler#stopWithLaunch}.
- */
 public final class JumpChargeOverlay {
-    // Package-private so GrindSpeedometerOverlay can register itself above this layer,
-    // keeping the bar visually beneath the speedometer + travel-direction arrow.
+
     static final ResourceLocation OVERLAY_ID =
         ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "jump_charge_bar");
 
-    // Same 30-segment bar Create uses in CarriageContraptionEntity#control's spaceDown branch.
     private static final int BAR_PIPES = 30;
-    // Filled-segment gradient endpoints — same RGB constants as Create's approach-station bar
-    // (fromColor 0xFFC244, toColor 0x529915). Interpolated by chargeRatio: gold at ratio 0,
-    // green at ratio 1, smoothly through olive in between.
+
     private static final int FROM_COLOR = 0xFFC244;
     private static final int TO_COLOR   = 0x529915;
-    // Empty-segment dim gray — same hex Create uses for unfilled pipes and prompt text.
+
     private static final int EMPTY_COLOR = 0x544D45;
-    // Same chase speed (50% per tick) and exp easing TrainHUD applies to displayedPromptSize,
-    // so the frame slide-in/slide-out feels identical.
+
     private static final float PROMPT_CHASE_SPEED = 0.5f;
-    // Width padding TrainHUD adds around the prompt text when computing its target frame
-    // size (mc.font.width(currentPrompt) + 17). Reproduced verbatim so the frame shape
-    // matches Create's at every fill state.
+
     private static final int PROMPT_WIDTH_PADDING = 17;
 
     private static final LerpedFloat displayedPromptSize = LerpedFloat.linear();
 
     private JumpChargeOverlay() {}
-
-    // GUI-layer registration lives in GrindSpeedometerOverlay so the two layers can be ordered
-    // deterministically (jump charge bar registered first, speedometer registered above it).
 
     @EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
     public static final class GameBusEvents {
@@ -81,10 +54,7 @@ public final class JumpChargeOverlay {
         if (mc.font == null) return;
         int target = 0;
         if (isVisible()) {
-            // Width is independent of fill — all 30 pipes are present at every charge state,
-            // only their colors change. So the prompt size is a constant for the duration of a
-            // charge, just chased smoothly in/out at the start/end. Computing it from the
-            // component itself (instead of hardcoding) keeps it correct if BAR_PIPES changes.
+
             target = mc.font.width(buildBarComponent(0.0)) + PROMPT_WIDTH_PADDING;
         }
         displayedPromptSize.chase(target, PROMPT_CHASE_SPEED, Chaser.EXP);
@@ -138,14 +108,10 @@ public final class JumpChargeOverlay {
         int promptSize = (int) displayedPromptSize.getValue(partialTicks);
         if (promptSize <= 1) return;
 
-        // Anchor mirrors TrainHUD: bottom-center of the screen, the same spot the train
-        // controls HUD would sit. Frame and text are translated relative to it.
         PoseStack pose = graphics.pose();
         pose.pushPose();
         pose.translate(graphics.guiWidth() / 2f - 91f, graphics.guiHeight() - 29f, 0f);
 
-        // Frame (left cap, right cap, stretched center). Identical sequence to TrainHUD's
-        // prompt frame draw — same offsets, same texture rectangle slice.
         pose.pushPose();
         pose.translate(promptSize / -2f + 91f, -27f, 0f);
         AllGuiTextures.TRAIN_PROMPT_L.render(graphics, -3, 0);
@@ -156,18 +122,13 @@ public final class JumpChargeOverlay {
             promptSize, AllGuiTextures.TRAIN_PROMPT.getHeight(), 256, 256);
         pose.popPose();
 
-        // Pipe-bar text. Built fresh each frame so the live charge ratio drives the fill.
         Component bar = buildBarComponent(getChargeRatio());
         Font font = mc.font;
         if (font.width(bar) < promptSize - 10) {
             pose.pushPose();
-            // Same translation TrainHUD uses for the prompt text — centered horizontally
-            // within the frame, vertically aligned to the same -27 + 4 = -23 baseline. The
-            // z=100 lifts the text above the frame in the depth buffer.
+
             pose.translate(font.width(bar) / -2f + 82f, -27f, 100f);
-            // No-shadow draw matches TrainHUD's currentPromptShadow=false branch (the
-            // approach-station bar uses the no-shadow path so the per-character colors aren't
-            // washed out by a global drop shadow).
+
             graphics.drawString(font, bar, 9, 4, EMPTY_COLOR, false);
             pose.popPose();
         }

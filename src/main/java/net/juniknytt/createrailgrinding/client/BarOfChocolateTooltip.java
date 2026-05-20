@@ -15,29 +15,6 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.ItemTooltipEvent;
 
-/**
- * Adds a Create-style "Hold [Shift] for Summary" tooltip block to Create's bar of chocolate,
- * because the base item ships without one. The summary, condition, and behaviour paragraphs
- * only appear when Shift is held — matching how Create's own item descriptions toggle. The
- * potion-style "Sonic Wind (1:00)" line is intentionally omitted; the behaviour paragraph
- * already names the effect and its duration.
- *
- * Layout when Shift is held:
- *   Bar of Chocolate                            ← vanilla item name
- *   A tasty treat that …                        ← summary, STANDARD_CREATE palette
- *   <blank>
- *   When Eaten                                  ← condition header, gray/white
- *    Grants _Sonic_ _Wind_ for _1 minute_, …    ← behaviour, indented, STANDARD_CREATE palette
- *
- * Layout when Shift is NOT held:
- *   Bar of Chocolate
- *   Hold [Shift] for Summary                    ← create.tooltip.holdForDescription, dark gray
- *
- * Reuses Create's own lang keys (create.tooltip.holdForDescription, create.tooltip.keyShift)
- * so the prompt is localized identically to Create's items. Behaviour text uses the
- * `_underscore_` highlight syntax handled by FontHelper.cutTextComponent — same convention as
- * Create's own behaviour lang strings (see DivingBootsTooltip and assets/create/lang/…).
- */
 @EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
 public final class BarOfChocolateTooltip {
     private static final ResourceLocation BAR_OF_CHOCOLATE =
@@ -57,8 +34,7 @@ public final class BarOfChocolateTooltip {
         List<Component> tooltip = event.getToolTip();
 
         if (Screen.hasShiftDown()) {
-            // Summary uses STANDARD_CREATE (Create's signature gold-on-orange) so _underscored_
-            // phrases render with the same highlight tint Create's own summary blocks use.
+
             tooltip.addAll(TooltipHelper.cutStringTextComponent(
                     Component.translatable(SUMMARY_KEY).getString(),
                     FontHelper.Palette.STANDARD_CREATE));

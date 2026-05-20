@@ -12,10 +12,10 @@
   ],
   "client": [
     "client.PlayerModelMixin",
+    "client.PlayerRendererHandMixin",
     "client.JumpChargeCameraMixin",
     "client.CameraLeanMixin",
     "client.HumanoidArmorLayerMixin",
-    "client.InventoryScreenRenderMixin",
     "client.LivingEntityRendererTiltMixin"
   ],
   "injectors": {

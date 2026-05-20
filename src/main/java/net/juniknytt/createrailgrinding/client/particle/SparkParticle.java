@@ -15,9 +15,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RegisterParticleProvidersEvent;
 import org.jetbrains.annotations.Nullable;
 
-
 public class SparkParticle extends TextureSheetParticle {
-
 
     private static final float  SIZE_BASE              = 0.25f;
     private static final double SPEED_SCALE_SATURATION = 0.25;

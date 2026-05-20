@@ -2,7 +2,7 @@ package net.juniknytt.createrailgrinding.mixin.client;
 
 import net.juniknytt.createrailgrinding.client.BalancingPoseTracker;
 import net.juniknytt.createrailgrinding.client.ClientInputHandler;
-import net.juniknytt.createrailgrinding.client.InventoryRenderTracker;
+import net.juniknytt.createrailgrinding.client.HandRenderTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.PlayerModel;
@@ -31,14 +31,6 @@ public abstract class PlayerModelMixin extends HumanoidModel<LivingEntity> {
     @Shadow @Final public ModelPart rightPants;
     @Shadow @Final public ModelPart jacket;
 
-    // Limb rotations imported from model.bbmodel and pre-converted to radians (the bbmodel
-    // values were in degrees: e.g. rightArm = (-58.55°, -33.41°, 50.26°)). The bbmodel head
-    // bone is intentionally ignored — vanilla setupAnim's netHeadYaw / headPitch already
-    // point the head at the camera, and only the head should respond to look. The bbmodel
-    // Body bone is also intentionally ignored — its 3-axis rotation (forward lean + ~52° yaw
-    // twist + sideways roll) made the torso look twisted, so the body holds a forward-facing
-    // T-pose with only the wobble overlaid.
-
     @Inject(
         method = "setupAnim(Lnet/minecraft/world/entity/LivingEntity;FFFFF)V",
         at = @At("TAIL")
@@ -51,34 +43,15 @@ public abstract class PlayerModelMixin extends HumanoidModel<LivingEntity> {
         if (!(entity instanceof Player player)) return;
         if (!BalancingPoseTracker.isBalancing(player)) return;
 
-        // Skip the first-person HAND render path only. PlayerRenderer.renderRightHand calls
-        // setupAnim and then resets only rightArm.xRot — our bbmodel y/zRot would otherwise
-        // ride through and put the held item / arm in the wrong spot. The hand render is
-        // triggered from world-render code while the world camera is in first-person, so
-        // `entity == mc.player && isFirstPerson()` flags it. The same predicate also fires
-        // during {@link net.minecraft.client.gui.screens.inventory.InventoryScreen}'s portrait
-        // render (the world camera state hasn't changed just because a GUI is open), so we
-        // additionally exclude {@link InventoryRenderTracker#isRendering()} to keep the
-        // grind pose visible on the inventory model — matching Create's chain-conveyor
-        // PlayerSkyhookRenderer which applies the hang pose unconditionally across all
-        // render contexts (no inventory / first-person guards).
-        Minecraft mc = Minecraft.getInstance();
-        if (entity == mc.player
-                && mc.options.getCameraType().isFirstPerson()
-                && !InventoryRenderTracker.isRendering()) return;
+        if (HandRenderTracker.isRendering()) return;
 
-        // Wobble — sine waves so the figure rocks subtly without looking mechanical.
         float wobbleZ = Mth.sin(ageInTicks * 0.18F) * 0.01F;
         float wobbleY = Mth.sin(ageInTicks * 0.13F) * 0.05F;
         float wobbleX = Mth.sin(ageInTicks * 0.31F) * 0.01F;
         float armWobble = Mth.sin(ageInTicks * 0.22F) * 0.1F;
 
-        // Pick the pose. The "boost" variant fires whenever the player is holding shift to
-        // accelerate, or — for the local player — charging a jump for the dismount launch.
-        // Sneak state is synced to remote clients via SynchedEntityData; jump-charge state
-        // is local-only (lives in ClientInputHandler), so it's only applied to mc.player.
         boolean useBoostPose = player.isShiftKeyDown()
-            || (entity == mc.player && ClientInputHandler.isCharging());
+            || (entity == Minecraft.getInstance().player && ClientInputHandler.isCharging());
 
         if (useBoostPose) {
             createrailgrinding$applyBoostPose(wobbleX, wobbleY, wobbleZ, armWobble);
@@ -86,8 +59,6 @@ public abstract class PlayerModelMixin extends HumanoidModel<LivingEntity> {
             createrailgrinding$applyNormalPose(wobbleX, wobbleY, wobbleZ, armWobble);
         }
 
-        // Vanilla setupAnim copies the outer skin layer to match the walk-cycle pose; redo it
-        // against the rewritten pose so jacket/sleeves/pants don't trail the inner mesh.
         this.leftSleeve.copyFrom(this.leftArm);
         this.rightSleeve.copyFrom(this.rightArm);
         this.leftPants.copyFrom(this.leftLeg);
@@ -96,12 +67,6 @@ public abstract class PlayerModelMixin extends HumanoidModel<LivingEntity> {
         this.hat.copyFrom(this.head);
     }
 
-    /**
-     * Default cruise stance. Override every rotation field so vanilla's walk / sneak / swim /
-     * item-hold mods are wiped, and reset every position field that the crouching block in
-     * HumanoidModel.setupAnim shifts (body.y, head.y, arm.y, leg.y, leg.z) so sneaking can't
-     * drop the legs/torso below the rest of the figure.
-     */
     @Unique
     private void createrailgrinding$applyNormalPose(
             float wobbleX, float wobbleY, float wobbleZ, float armWobble) {
@@ -122,7 +87,6 @@ public abstract class PlayerModelMixin extends HumanoidModel<LivingEntity> {
         this.leftArm.zRot = -1.2638128F - armWobble;
         this.leftArm.y = 3.5F;
 
-        // Leg pivots overridden to ±3 (vanilla is ±1.9) for a Sonic-style wide grind stance.
         this.rightLeg.xRot = -1.1550762F;
         this.rightLeg.yRot = -1.0731485F;
         this.rightLeg.zRot =  1.0925566F + wobbleZ * 0.3F;
@@ -138,12 +102,6 @@ public abstract class PlayerModelMixin extends HumanoidModel<LivingEntity> {
         this.leftLeg.z = 3.0F;
     }
 
-    /**
-     * Boost / jump-charge stance — fires while the player holds sneak to accelerate, or while
-     * charging a jump for the dismount launch (local player only). Initial values duplicate
-     * {@link #createrailgrinding$applyNormalPose}; tweak each axis here to differentiate the
-     * wind-up stance from the cruise pose.
-     */
     @Unique
     private void createrailgrinding$applyBoostPose(
             float wobbleX, float wobbleY, float wobbleZ, float armWobble) {
@@ -165,7 +123,6 @@ public abstract class PlayerModelMixin extends HumanoidModel<LivingEntity> {
         this.leftArm.zRot = -1.2638128F - armWobble;
         this.leftArm.y = 4.5F;
         this.leftArm.z = 1F;
-
 
         this.rightLeg.xRot = -1.4550762F;
         this.rightLeg.yRot = -1.3731485F;

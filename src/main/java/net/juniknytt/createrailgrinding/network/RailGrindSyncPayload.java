@@ -10,13 +10,6 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.UUID;
 
-/**
- * Server → client grind-state sync. {@code silent} suppresses the one-shot grind-start
- * effects (collide sound + dismount-prompt overlay) on the receiving client — used for
- * portal-driven re-grinds where the player was already grinding before the dimension
- * change and the start effects would feel like a fresh mount instead of a seamless
- * continuation.
- */
 public record RailGrindSyncPayload(UUID playerId, boolean grinding, boolean silent) implements CustomPacketPayload {
     public static final Type<RailGrindSyncPayload> TYPE = new Type<>(
         ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "rail_grind_sync"));

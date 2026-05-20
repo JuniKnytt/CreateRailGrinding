@@ -66,22 +66,16 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-//DNE import com.simibubi.create.content.schematics.SchematicWorld;
-//DNE import com.simibubi.create.foundation.utility.Components;
-//DNE import com.simibubi.create.foundation.utility.Couple;
-//DNE import com.simibubi.create.foundation.utility.Lang;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 
-// The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(RailGrind.MODID)
 public class RailGrind {
-    // Define mod id in a common place for everything to reference
+
     public static final String MODID = "createrailgrinding";
-    // Directly reference a slf4j logger
+
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public RailGrind(IEventBus modBus, ModContainer container) {
@@ -92,41 +86,10 @@ public class RailGrind {
         container.registerConfig(ModConfig.Type.SERVER, Config.SERVER_SPEC);
     }
 
-    // You can use SubscribeEvent and let the Event Bus discover methods to call
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
-        // Do something when the server starts
+
         LOGGER.info("Rolling around at the speed of sound!");
     }
 
-
-
-
-
 }
-
-/*
-Resources:
-https://github.com/Layers-of-Railways/Railway/tree/1.20/dev/common/src/main/java/com/railwayteam/railways/content/handcar
-https://github.com/Creators-of-Create/Create/blob/2fcc6a706478d6a015880bd4c81f216d2379dc1f/src/main/java/com/simibubi/create/content/trains/entity/CarriageContraption.java
-https://github.com/Layers-of-Railways/Railway/blob/1.20/dev/common/src/main/java/com/railwayteam/railways/content/coupling/TrainUtils.java#L57 DISCARDS
-
-STEPS
-Right click with fist
-    -Check player is wearing either diving boots
-    -Check for rail graph
-    -Create fake Train
-Fake Train locs
-    -Seat offset to a side
-On Fake Train
-    -Make owner driver
-    -Seat Owner
-    -Delete
-    -add grinding sound
-    -Delete on dismount
-On Dismount
-    -if driver null and or dismount delete train.
-
-TO DO:
-Make a fake train with default bogey pop up when wearing diving boots and right click rail
- */

@@ -18,9 +18,6 @@ public final class ModEnchantments {
             Registries.ENCHANTMENT,
             ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "railgrind_enchantment"));
 
-    /** Loose presence check: matches any holder whose ResourceKey location equals our id, on
-     *  either the active enchantments component or the stored-enchantments component (books).
-     *  Does NOT require Holder identity / Reference instance equality — only the registry id. */
     private static final ResourceLocation RAILGRIND_ENCHANTMENT_ID = RAILGRIND_ENCHANTMENT.location();
 
     private ModEnchantments() {}

@@ -12,7 +12,6 @@ public final class ModParticles {
     public static final DeferredRegister<ParticleType<?>> PARTICLE_TYPES =
         DeferredRegister.create(BuiltInRegistries.PARTICLE_TYPE, RailGrind.MODID);
 
-    /** Spark that pops upward then arcs back down under gravity, like sparks from a grinder. */
     public static final DeferredHolder<ParticleType<?>, SimpleParticleType> SPARK =
         PARTICLE_TYPES.register("spark", () -> new SimpleParticleType(false));
 

@@ -12,11 +12,10 @@ public final class ModSounds {
     public static final DeferredRegister<SoundEvent> SOUNDS =
         DeferredRegister.create(BuiltInRegistries.SOUND_EVENT, RailGrind.MODID);
 
-    /** Brief one-shot played when the player snaps onto a rail / hits a junction. */
     public static final DeferredHolder<SoundEvent, SoundEvent> GRIND_COLLIDE   = register("grind_collide");
-    /** Looping grind tone, used while moving at sprint speed or above. */
+
     public static final DeferredHolder<SoundEvent, SoundEvent> GRIND_FAST_LOOP = register("grind_fast_loop");
-    /** Looping grind tone, used while moving below sprint speed. */
+
     public static final DeferredHolder<SoundEvent, SoundEvent> GRIND_SLOW_LOOP = register("grind_slow_loop");
 
     private ModSounds() {}

@@ -17,9 +17,7 @@ public class RailGrindPonderPlugin implements PonderPlugin {
 
     @Override
     public void registerScenes(PonderSceneRegistrationHelper<ResourceLocation> helper) {
-        // Mirrors Create's own train-track ponder pattern: TrackMaterial.allBlocks() lists every
-        // registered Train Track variant (Andesite + any modded materials), so the scene attaches
-        // to all of them in one shot.
+
         ResourceLocation[] trackIds = TrackMaterial.allBlocks().stream()
                 .map(supplier -> BuiltInRegistries.BLOCK.getKey(supplier.get()))
                 .toArray(ResourceLocation[]::new);

@@ -15,19 +15,6 @@ import net.neoforged.neoforge.client.event.RenderGuiEvent;
 
 import java.util.Locale;
 
-/**
- * Debug-only HUD overlay: prints the local player's live grind state
- * (currentSpeed, targetSpeed, accel, slope, etc.) in the top-left corner.
- * Toggled by {@link Config#DEBUG_MODE}.
- *
- * <p>Data sources in priority order:
- *  <ol>
- *      <li>{@link RailGrindDebugSyncCache} — the server is broadcasting debug snapshots
- *          (server config {@code syncDebugToClients=true}); this is the dedicated-server path.</li>
- *      <li>Direct calls into {@link RailGrindHandler} — works on integrated server because the
- *          ACTIVE map lives in the same JVM as the client.</li>
- *  </ol>
- */
 @EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
 public final class RailGrindDebugHud {
     private static final int X_PAD = 4;
@@ -37,14 +24,6 @@ public final class RailGrindDebugHud {
 
     private RailGrindDebugHud() {}
 
-    /**
-     * Format the "distance until MAX_DRIFT cancelation" HUD line. NaN means the drift
-     * check is currently suppressed (reattach or start grace window active) — we show
-     * that explicitly rather than printing a misleading number. Positive = healthy
-     * margin, near-zero = about to kick, negative = the bailout would have fired this
-     * tick if the suppression gate weren't active (can only appear if NaN handling
-     * upstream is wrong; print the raw signed value so the bug is visible).
-     */
     private static String formatDriftMargin(double margin) {
         if (Double.isNaN(margin)) {
             return "distUntilMaxDrift: suppressed (in grace)";
@@ -52,11 +31,6 @@ public final class RailGrindDebugHud {
         return String.format(Locale.ROOT, "distUntilMaxDrift: %+.3f", margin);
     }
 
-    /**
-     * Format the "ticks since both grace counters first hit 0" line. -1 means grace is still
-     * active (or no grind exists). 0 means grace fully expired this tick or last; >0 means
-     * N ticks have elapsed post-grace. See {@code GrindState.ticksSinceGraceEnded}.
-     */
     private static String formatTicksSinceGraceEnded(int ticks) {
         if (ticks < 0) return "ticksSinceGraceEnded: in grace";
         return String.format(Locale.ROOT, "ticksSinceGraceEnded: %d", ticks);
@@ -145,17 +119,9 @@ public final class RailGrindDebugHud {
                 graphics.drawString(font, line, X_PAD, y, COLOR, true);
                 y += LINE_HEIGHT;
             }
-            y += LINE_HEIGHT / 2;  // small gap before the always-on train-overlap section
+            y += LINE_HEIGHT / 2;
         }
 
-        // Train-overlap crush state — rendered even when not grinding so the gate's
-        // behavior is still visible from outside a grind (e.g., standing inside a parked
-        // carriage, or right after the counter kicks the player off the rail). Putting
-        // these inside the grind block instead would blank the count the same tick the
-        // kick fires — gs disappears before the next render — so the user would never
-        // actually see the value reach the threshold. Bool is derived from the counter
-        // (count > 0 ↔ overlap this tick) since tickTrainOverlap removes the entry on
-        // the first miss.
         String[] overlapLines = {
             String.format(Locale.ROOT, "intersectingTrainAABB: %b", overlapTicks > 0),
             String.format(Locale.ROOT, "trainOverlapTicks: %d", overlapTicks),
@@ -167,10 +133,6 @@ public final class RailGrindDebugHud {
             y += LINE_HEIGHT;
         }
 
-        // Last-cancel snapshot — overwritten on every stop() server-side. Each cancel path
-        // declares its StopReason at the call site, so the HUD just renders the human-readable
-        // displayName + how long after grace ended the drop happened.
-        // ticksSinceGraceEnded: -1 = during grace; 0 = first post-grace tick; N = N ticks after.
         if (hasLastDrop) {
             y += LINE_HEIGHT / 2;
             String[] lastDropLines = {
@@ -186,11 +148,6 @@ public final class RailGrindDebugHud {
             }
         }
 
-        // Last-right-click snapshot — populated by ClientInputHandler.onClickInput on every
-        // empty-hand right-click. Used to diagnose why a rail click did or did not trigger
-        // a grind start (particularly for Sable sublevel rails, where the raycast hit
-        // position lives in a partially-transformed frame and "did the detection succeed?"
-        // is the central question).
         ClientInputHandler.LastRightClickInfo rc = ClientInputHandler.lastRightClickInfo;
         if (rc != null) {
             y += LINE_HEIGHT / 2;

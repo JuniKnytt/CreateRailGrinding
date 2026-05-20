@@ -12,12 +12,10 @@ public final class ModEffects {
     public static final DeferredRegister<MobEffect> EFFECTS =
         DeferredRegister.create(BuiltInRegistries.MOB_EFFECT, RailGrind.MODID);
 
-    // Bumps top sneak speed, sneak acceleration, cruise grind speed, and rail jump charge by this factor while active.
     public static final double SONIC_WIND_MULTIPLIER = 1.25;
-    // 1 minute, in ticks.
+
     public static final int SONIC_WIND_DURATION_TICKS = 1200;
 
-    // Display name "Sonic Wind"; registry path is the internal name.
     public static final DeferredHolder<MobEffect, MobEffect> SONIC_WIND =
         EFFECTS.register("railgrindboost", SonicWindEffect::new);
 

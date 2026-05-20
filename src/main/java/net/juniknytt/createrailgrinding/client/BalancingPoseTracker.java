@@ -6,7 +6,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Client-side flag for which players currently render the balancing pose. */
 public final class BalancingPoseTracker {
     private static final Set<UUID> BALANCING = ConcurrentHashMap.newKeySet();
 

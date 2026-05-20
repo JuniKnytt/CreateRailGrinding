@@ -10,26 +10,6 @@ import net.minecraft.world.item.ItemStack;
 import java.util.Locale;
 import java.util.Set;
 
-/**
- * Cosmetic skin gate for rail-grind boots renamed in an anvil. The skin applies through
- * either of two independent routines — {@link #matches(ItemStack)} is the OR of the two
- * so callers can stay agnostic, but the routines themselves are kept separate so each
- * can evolve on its own.
- *
- *   Routine A — {@link #matchesDivingBoots(ItemStack)}:
- *     Stack is in tag {@code #createrailgrinding:is_diving_boots} (Create's two diving
- *     boots by default; addons can extend via datapack) AND has a matching custom name.
- *     This is the original cosmetic path — diving boots get the skin from a rename alone.
- *
- *   Routine B — {@link #matchesRailgrindEnchanted(ItemStack)}:
- *     Stack carries the rail-grind enchantment ({@code createrailgrinding:railgrind_enchantment})
- *     AND has a matching custom name. Lets ANY foot armor — iron, leather, modded — opt
- *     into the skin once the player has applied Rail Rider via the enchanting table or anvil.
- *
- * Custom-name check is shared by {@link #hasMatchingName(ItemStack)}. Comparison
- * lower-cases via {@link Locale#ROOT} so the match is locale-independent. Append new
- * aliases to {@link #NAMES}.
- */
 public final class CustomBootSkin {
     private CustomBootSkin() {}
 
@@ -37,7 +17,6 @@ public final class CustomBootSkin {
             net.minecraft.core.registries.Registries.ITEM,
             ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "is_diving_boots"));
 
-    /** Add new aliases here. Whitespace is trimmed and case is ignored at match time. */
     public static final Set<String> NAMES = Set.of(
             "sonic",
             "sonic shoes",
@@ -84,21 +63,18 @@ public final class CustomBootSkin {
             "gotta go fast",
             "got to go fast"
 
-
     );
 
     public static boolean matches(ItemStack stack) {
         return matchesDivingBoots(stack) || matchesRailgrindEnchanted(stack);
     }
 
-    /** Routine A: diving boots get the skin from a rename alone. */
     public static boolean matchesDivingBoots(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return false;
         if (!stack.is(IS_DIVING_BOOTS)) return false;
         return hasMatchingName(stack);
     }
 
-    /** Routine B: any boots get the skin from a rename once enchanted with Rail Rider. */
     public static boolean matchesRailgrindEnchanted(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return false;
         if (!hasMatchingName(stack)) return false;
