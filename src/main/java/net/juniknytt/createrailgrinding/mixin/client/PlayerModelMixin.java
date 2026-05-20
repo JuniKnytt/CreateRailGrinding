@@ -2,6 +2,7 @@ package net.juniknytt.createrailgrinding.mixin.client;
 
 import net.juniknytt.createrailgrinding.client.BalancingPoseTracker;
 import net.juniknytt.createrailgrinding.client.ClientInputHandler;
+import net.juniknytt.createrailgrinding.client.InventoryRenderTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.PlayerModel;
@@ -50,12 +51,21 @@ public abstract class PlayerModelMixin extends HumanoidModel<LivingEntity> {
         if (!(entity instanceof Player player)) return;
         if (!BalancingPoseTracker.isBalancing(player)) return;
 
-        // Skip the first-person hand render path. PlayerRenderer.renderRightHand calls
+        // Skip the first-person HAND render path only. PlayerRenderer.renderRightHand calls
         // setupAnim and then resets only rightArm.xRot — our bbmodel y/zRot would otherwise
-        // ride through and put the held item / arm in the wrong spot. Body, legs, and head
-        // aren't rendered in first-person at all, so bailing entirely is safe.
+        // ride through and put the held item / arm in the wrong spot. The hand render is
+        // triggered from world-render code while the world camera is in first-person, so
+        // `entity == mc.player && isFirstPerson()` flags it. The same predicate also fires
+        // during {@link net.minecraft.client.gui.screens.inventory.InventoryScreen}'s portrait
+        // render (the world camera state hasn't changed just because a GUI is open), so we
+        // additionally exclude {@link InventoryRenderTracker#isRendering()} to keep the
+        // grind pose visible on the inventory model — matching Create's chain-conveyor
+        // PlayerSkyhookRenderer which applies the hang pose unconditionally across all
+        // render contexts (no inventory / first-person guards).
         Minecraft mc = Minecraft.getInstance();
-        if (entity == mc.player && mc.options.getCameraType().isFirstPerson()) return;
+        if (entity == mc.player
+                && mc.options.getCameraType().isFirstPerson()
+                && !InventoryRenderTracker.isRendering()) return;
 
         // Wobble — sine waves so the figure rocks subtly without looking mechanical.
         float wobbleZ = Mth.sin(ageInTicks * 0.18F) * 0.01F;

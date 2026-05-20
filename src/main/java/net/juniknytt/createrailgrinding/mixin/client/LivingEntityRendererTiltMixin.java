@@ -83,6 +83,14 @@ public abstract class LivingEntityRendererTiltMixin {
         if (!(entity instanceof Player player)) return;
         if (!BalancingPoseTracker.isBalancing(player)) return;
 
+        // No inventory / first-person gate: setupRotations isn't reached from
+        // PlayerRenderer.renderRightHand (the hand render bypasses the full LivingEntityRenderer
+        // pipeline), so it's safe to apply the slope tilt + lean roll on every render context —
+        // matching Create's chain-conveyor pose pipeline which is similarly context-blind.
+        // In the inventory, the entity's yRot is briefly overwritten to follow the mouse, and
+        // our lean axis uses that yRot — so the lean rolls around the body's current facing,
+        // pivoting smoothly as the user mouses around the portrait.
+
         // Push lean FIRST so it's the outermost transform — applied to the slope-pitched
         // body, rolling the already-tilted figure around its forward axis. See class javadoc.
         float lean = RailGrindLeanTracker.getRenderLean(player, partialTicks);
