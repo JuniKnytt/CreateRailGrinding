@@ -9,21 +9,25 @@ import com.simibubi.create.content.trains.graph.TrackGraph;
 import com.simibubi.create.content.trains.graph.TrackGraphHelper;
 import com.simibubi.create.content.trains.graph.TrackGraphLocation;
 import com.simibubi.create.content.trains.graph.TrackNode;
+import com.simibubi.create.content.trains.graph.TrackNodeLocation;
 import com.simibubi.create.content.trains.track.BezierConnection;
 import com.simibubi.create.content.trains.track.BezierTrackPointLocation;
 import com.simibubi.create.content.trains.track.ITrackBlock;
 import com.simibubi.create.content.trains.track.TrackBlockEntity;
 import com.simibubi.create.content.trains.track.TrackMaterial;
+import com.simibubi.create.infrastructure.config.AllConfigs;
 import net.createmod.catnip.data.Couple;
 import net.createmod.catnip.math.BlockFace;
 import net.juniknytt.createrailgrinding.Config;
 import net.juniknytt.createrailgrinding.RailGrind;
+import net.juniknytt.createrailgrinding.advancement.ModTriggers;
 import net.juniknytt.createrailgrinding.client.BalancingPoseTracker;
 import net.juniknytt.createrailgrinding.compat.Mods;
 import net.juniknytt.createrailgrinding.compat.SableSubLevels;
 import net.juniknytt.createrailgrinding.effect.ModEffects;
 import net.juniknytt.createrailgrinding.network.GrindAccelInputPayload;
 import net.juniknytt.createrailgrinding.network.GrindParticleBurstPayload;
+import net.juniknytt.createrailgrinding.network.RailGrindAccelSyncPayload;
 import net.juniknytt.createrailgrinding.network.RailGrindDebugSyncPayload;
 import net.juniknytt.createrailgrinding.network.RailGrindLeanSyncPayload;
 import net.juniknytt.createrailgrinding.network.RailGrindSyncPayload;
@@ -48,6 +52,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.NeoForgeMod;
 import net.neoforged.neoforge.fluids.FluidType;
@@ -55,6 +60,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -220,6 +226,10 @@ public final class RailGrindHandler {
 
     private RailGrindHandler() {}
 
+    private static final float FALL_NEGATE_SAFE_DISTANCE = 3.0F;
+    private static final int FALL_NEGATE_DAMAGE_THRESHOLD = 20;
+    private static final int FALL_NEGATE_GRANT_TICKS = 10;
+
     private static final class GrindState {
         final TrackGraph graph;
         TrackNode fromNode;
@@ -255,6 +265,7 @@ public final class RailGrindHandler {
         @Nullable TrackMaterial.TrackType railTrackType;
         int steerSign;
         byte accelInputMode = GrindAccelInputPayload.VANILLA;
+        boolean lastBroadcastAccel;
         boolean collidingWithTrain;
 
         @Nullable SableSubLevels.SubLevelHandle subLevel;
@@ -262,6 +273,8 @@ public final class RailGrindHandler {
         int ticksSinceGraceEnded = -1;
 
         int postReattachKickSuppressTicks = 0;
+
+        boolean fallNegateCandidate;
 
         GrindState(TrackGraph graph, TrackNode fromNode, TrackNode toNode, TrackEdge edge, double position) {
             this.graph = graph;
@@ -296,6 +309,13 @@ public final class RailGrindHandler {
             gs.accelInputMode = mode;
         } else {
             gs.accelInputMode = GrindAccelInputPayload.VANILLA;
+        }
+
+        boolean nowAccel = isAcceleratingForGrind(player, gs);
+        if (nowAccel != gs.lastBroadcastAccel && player instanceof ServerPlayer sp) {
+            gs.lastBroadcastAccel = nowAccel;
+            PacketDistributor.sendToPlayersTrackingEntityAndSelf(
+                sp, new RailGrindAccelSyncPayload(sp.getUUID(), nowAccel));
         }
     }
 
@@ -446,6 +466,11 @@ public final class RailGrindHandler {
         }
         gs.startGraceTicks = START_GRACE_TICKS + latencyTicks;
 
+        gs.fallNegateCandidate = !(player.getAbilities().instabuild
+                || player.isFallFlying()
+                || player.isAutoSpinAttack())
+                && Math.ceil(player.fallDistance - FALL_NEGATE_SAFE_DISTANCE) >= FALL_NEGATE_DAMAGE_THRESHOLD;
+
         if (player.getAbilities().flying) {
             player.getAbilities().flying = false;
             if (player instanceof ServerPlayer sp) sp.onUpdateAbilities();
@@ -465,6 +490,10 @@ public final class RailGrindHandler {
         syncPose(player, true);
 
         sendTargetToPlayer(player, spawn, Vec3.ZERO, 0.0, false);
+
+        if (player instanceof ServerPlayer sp) {
+            ModTriggers.RAIL_GRIND.get().trigger(sp);
+        }
         return true;
     }
 
@@ -796,6 +825,11 @@ public final class RailGrindHandler {
         return TRAIN_OVERLAP_TICKS.getOrDefault(player.getUUID(), 0);
     }
 
+    private static final double GRAPH_SCAN_SAMPLES_PER_BLOCK = 4.0;
+    private static final int GRAPH_SCAN_MIN_SAMPLES = 8;
+    private static final int GRAPH_SCAN_ABS_MAX_SAMPLES = 8192;
+    private static final int GRAPH_SCAN_FALLBACK_MAX_RAIL_LENGTH = 256;
+
     public record RailHit(TrackGraphLocation loc, @Nullable SableSubLevels.SubLevelHandle subLevel) {}
 
     public static RailHit findNearestRailLocation(Level level, Vec3 origin, double maxDist) {
@@ -807,16 +841,13 @@ public final class RailGrindHandler {
         double[] bestDistSq = { maxDistOuter * maxDistOuter };
         double baseDistSq = maxDist * maxDist;
 
-        scanLevelForRails(level, origin, origin, null, bestLoc, bestSub, bestDistSq, baseDistSq);
+        forEachGrindScanLevel(level, origin, maxDistOuter, (lvl, originInLevel, originWorld, handle) ->
+                scanLevelForRails(lvl, originInLevel, originWorld, handle, bestLoc, bestSub, bestDistSq, baseDistSq));
 
-        Mods.SABLE.executeIfInstalled(() -> () -> {
-            for (SableSubLevels.SubLevelHandle handle : SableSubLevels.sublevelsNear(level, origin, maxDistOuter)) {
-                Level slLevel = handle.getLevel();
-                if (slLevel == null) continue;
-                Vec3 originLocal = handle.toLocal(origin);
-                scanLevelForRails(slLevel, originLocal, origin, handle, bestLoc, bestSub, bestDistSq, baseDistSq);
-            }
-        });
+        if (bestLoc[0] == null) {
+            forEachGrindScanLevel(level, origin, maxDistOuter, (lvl, originInLevel, originWorld, handle) ->
+                    scanGraphsForRails(lvl, originInLevel, originWorld, handle, bestLoc, bestSub, bestDistSq, baseDistSq));
+        }
 
         return bestLoc[0] == null ? null : new RailHit(bestLoc[0], bestSub[0]);
     }
@@ -828,7 +859,29 @@ public final class RailGrindHandler {
         double[] bestDistSq = { maxDistOuter * maxDistOuter };
         double baseDistSq = maxDist * maxDist;
         scanLevelForRails(level, origin, origin, null, bestLoc, bestSub, bestDistSq, baseDistSq);
+        if (bestLoc[0] == null) {
+            scanGraphsForRails(level, origin, origin, null, bestLoc, bestSub, bestDistSq, baseDistSq);
+        }
         return bestLoc[0];
+    }
+
+    @FunctionalInterface
+    private interface GrindLevelScanner {
+        void scan(Level level, Vec3 originInLevel, Vec3 originWorld,
+                  @Nullable SableSubLevels.SubLevelHandle handle);
+    }
+
+    private static void forEachGrindScanLevel(Level level, Vec3 origin, double sublevelProbeRadius,
+                                              GrindLevelScanner scanner) {
+        scanner.scan(level, origin, origin, null);
+        Mods.SABLE.executeIfInstalled(() -> () -> {
+            for (SableSubLevels.SubLevelHandle handle : SableSubLevels.sublevelsNear(level, origin, sublevelProbeRadius)) {
+                Level slLevel = handle.getLevel();
+                if (slLevel == null) continue;
+                Vec3 originLocal = handle.toLocal(origin);
+                scanner.scan(slLevel, originLocal, origin, handle);
+            }
+        });
     }
 
     private static void scanLevelForRails(
@@ -910,6 +963,166 @@ public final class RailGrindHandler {
                 }
             }
         }
+    }
+
+    private static void scanGraphsForRails(
+            Level level, Vec3 originInLevel, Vec3 originWorld,
+            @Nullable SableSubLevels.SubLevelHandle handle,
+            TrackGraphLocation[] bestLoc,
+            SableSubLevels.SubLevelHandle[] bestSub,
+            double[] bestDistSq,
+            double baseDistSq) {
+
+        ResourceKey<Level> dimension = level.dimension();
+        Collection<TrackGraph> graphs = Create.RAILWAYS.sided(level).trackNetworks.values();
+        int maxSamples = graphScanMaxSamples();
+
+        for (TrackGraph graph : graphs) {
+            AABB graphBox;
+            try {
+                graphBox = graph.getBounds(level).box;
+            } catch (Exception e) {
+                graphBox = null;
+            }
+            if (graphBox != null && !graphBox.inflate(Math.sqrt(bestDistSq[0])).contains(originInLevel)) continue;
+
+            for (TrackNodeLocation nodeLoc : graph.getNodes()) {
+                if (!dimension.equals(nodeLoc.getDimension())) continue;
+                TrackNode node = graph.locateNode(nodeLoc);
+                if (node == null) continue;
+                Map<TrackNode, TrackEdge> connections = graph.getConnectionsFrom(node);
+                if (connections == null) continue;
+
+                for (Map.Entry<TrackNode, TrackEdge> entry : connections.entrySet()) {
+                    TrackNode other = entry.getKey();
+                    if (node.getNetId() >= other.getNetId()) continue;
+                    TrackEdge edge = entry.getValue();
+                    if (edge.isInterDimensional()) continue;
+
+                    TrackMaterial material = edge.getTrackMaterial();
+                    if (!isGrindableMaterial(material)) continue;
+
+                    double edgeLen = edge.getLength();
+                    if (edgeLen <= 1e-6) continue;
+
+                    boolean wideGauge = isWideGaugeTrackType(material.trackType);
+                    double candidateCap = wideGauge ? bestDistSq[0] : Math.min(baseDistSq, bestDistSq[0]);
+
+                    BezierConnection conn = edge.isTurn() ? edge.getTurn() : null;
+                    AABB edgeBox = conn != null
+                            ? conn.getBounds()
+                            : new AABB(node.getLocation().getLocation(), other.getLocation().getLocation());
+                    if (!edgeBox.inflate(Math.sqrt(candidateCap)).contains(originInLevel)) continue;
+
+                    int samples = (int) Math.ceil(edgeLen * GRAPH_SCAN_SAMPLES_PER_BLOCK);
+                    samples = Math.max(GRAPH_SCAN_MIN_SAMPLES, Math.min(maxSamples, samples));
+
+                    for (int i = 0; i <= samples; i++) {
+                        double t = i / (double) samples;
+                        Vec3 p = edge.getPosition(graph, t);
+                        Vec3 pWorld = handle == null ? p : handle.toWorld(p);
+                        double d2 = pWorld.distanceToSqr(originWorld);
+                        if (d2 >= candidateCap) continue;
+
+                        TrackGraphLocation loc = new TrackGraphLocation();
+                        loc.graph = graph;
+                        loc.edge = Couple.create(node.getLocation(), other.getLocation());
+                        loc.position = t * edgeLen;
+
+                        bestDistSq[0] = d2;
+                        bestLoc[0] = loc;
+                        bestSub[0] = handle;
+                        candidateCap = wideGauge ? bestDistSq[0] : Math.min(baseDistSq, bestDistSq[0]);
+                    }
+                }
+            }
+        }
+    }
+
+    public static int maxRailLengthBlocks() {
+        try {
+            return Math.max(1, AllConfigs.server().trains.maxTrackPlacementLength.get());
+        } catch (Throwable t) {
+            return GRAPH_SCAN_FALLBACK_MAX_RAIL_LENGTH;
+        }
+    }
+
+    private static int graphScanMaxSamples() {
+        int byLength = (int) Math.ceil(maxRailLengthBlocks() * GRAPH_SCAN_SAMPLES_PER_BLOCK);
+        return Math.max(GRAPH_SCAN_MIN_SAMPLES, Math.min(GRAPH_SCAN_ABS_MAX_SAMPLES, byLength));
+    }
+
+    @Nullable
+    public static Vec3 pickGrindableCurvePointOnRay(Level level, Vec3 eye, Vec3 target, double maxDistSq) {
+        ResourceKey<Level> dimension = level.dimension();
+        Collection<TrackGraph> graphs = Create.RAILWAYS.sided(level).trackNetworks.values();
+        int maxSamples = graphScanMaxSamples();
+        double tolReach = Math.sqrt(maxDistSq);
+
+        Vec3 best = null;
+        double bestEyeDistSq = Double.MAX_VALUE;
+
+        for (TrackGraph graph : graphs) {
+            AABB graphBox;
+            try {
+                graphBox = graph.getBounds(level).box;
+            } catch (Exception e) {
+                graphBox = null;
+            }
+            if (graphBox != null) {
+                AABB inflated = graphBox.inflate(tolReach + 1.0);
+                if (!inflated.contains(eye) && inflated.clip(eye, target).isEmpty()) continue;
+            }
+
+            for (TrackNodeLocation nodeLoc : graph.getNodes()) {
+                if (!dimension.equals(nodeLoc.getDimension())) continue;
+                TrackNode node = graph.locateNode(nodeLoc);
+                if (node == null) continue;
+                Map<TrackNode, TrackEdge> connections = graph.getConnectionsFrom(node);
+                if (connections == null) continue;
+
+                for (Map.Entry<TrackNode, TrackEdge> entry : connections.entrySet()) {
+                    TrackNode other = entry.getKey();
+                    if (node.getNetId() >= other.getNetId()) continue;
+                    TrackEdge edge = entry.getValue();
+                    if (edge.isInterDimensional()) continue;
+                    if (!isGrindableMaterial(edge.getTrackMaterial())) continue;
+
+                    double edgeLen = edge.getLength();
+                    if (edgeLen <= 1e-6) continue;
+
+                    BezierConnection conn = edge.isTurn() ? edge.getTurn() : null;
+                    AABB edgeBox = conn != null
+                            ? conn.getBounds()
+                            : new AABB(node.getLocation().getLocation(), other.getLocation().getLocation());
+                    AABB inflatedEdge = edgeBox.inflate(tolReach + 0.5);
+                    if (!inflatedEdge.contains(eye) && inflatedEdge.clip(eye, target).isEmpty()) continue;
+
+                    int samples = (int) Math.ceil(edgeLen * GRAPH_SCAN_SAMPLES_PER_BLOCK);
+                    samples = Math.max(GRAPH_SCAN_MIN_SAMPLES, Math.min(maxSamples, samples));
+
+                    for (int i = 0; i <= samples; i++) {
+                        double t = i / (double) samples;
+                        Vec3 p = edge.getPosition(graph, t);
+                        if (distancePointToSegmentSq(p, eye, target) > maxDistSq) continue;
+                        double eyeDistSq = p.distanceToSqr(eye);
+                        if (eyeDistSq < bestEyeDistSq) {
+                            bestEyeDistSq = eyeDistSq;
+                            best = p;
+                        }
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
+    private static double distancePointToSegmentSq(Vec3 p, Vec3 a, Vec3 b) {
+        Vec3 ab = b.subtract(a);
+        double abLenSq = ab.lengthSqr();
+        if (abLenSq < 1.0e-9) return p.distanceToSqr(a);
+        double t = Math.max(0.0, Math.min(1.0, p.subtract(a).dot(ab) / abLenSq));
+        return p.distanceToSqr(a.add(ab.scale(t)));
     }
 
     private static TrackGraphLocation resolvePlainTrack(Level level, BlockPos pos, BlockState state, ITrackBlock track) {
@@ -1151,6 +1364,12 @@ public final class RailGrindHandler {
 
         gs.totalTicks++;
 
+        if (gs.fallNegateCandidate && gs.totalTicks >= FALL_NEGATE_GRANT_TICKS
+                && player instanceof ServerPlayer sp) {
+            gs.fallNegateCandidate = false;
+            ModTriggers.FALLDAMAGE_NEGATE.get().trigger(sp);
+        }
+
         if (player.level() instanceof ServerLevel sl) {
             double speedRatio = Math.min(2.0, gs.currentSpeed / topSpeed());
             if (speedRatio >= GRIND_PARTICLE_MIN_SPEED_RATIO) {
@@ -1291,7 +1510,7 @@ public final class RailGrindHandler {
     private static double computeAcceleration(GrindState gs, Player player) {
 
         double base = isAcceleratingForGrind(player, gs)
-                ? ACCELERATION * Config.SNEAK_ACCELERATION.get() * ModEffects.sonicWindMultiplier(player)
+                ? ACCELERATION * Config.CROUCH_ACCELERATION.get() * ModEffects.sonicWindMultiplier(player)
                 : ACCELERATION;
         double slope = gs.experiencedSlope;
         if (slope < 0) base *= 1.0 + (-slope) * (DOWNHILL_ACCEL_BOOST - 1.0) * Config.DOWNWARD_MOMENTUM_GAIN.get();
@@ -1693,9 +1912,15 @@ public final class RailGrindHandler {
         PacketDistributor.sendToPlayer(observer,
             new RailGrindSyncPayload(target.getUUID(), isGrinding(target), true));
         GrindState gs = ACTIVE.get(target.getUUID());
-        if (gs != null && gs.steerSign != 0) {
-            PacketDistributor.sendToPlayer(observer,
-                new RailGrindLeanSyncPayload(target.getUUID(), (byte) gs.steerSign));
+        if (gs != null) {
+            if (gs.steerSign != 0) {
+                PacketDistributor.sendToPlayer(observer,
+                    new RailGrindLeanSyncPayload(target.getUUID(), (byte) gs.steerSign));
+            }
+            if (isAcceleratingForGrind(target, gs)) {
+                PacketDistributor.sendToPlayer(observer,
+                    new RailGrindAccelSyncPayload(target.getUUID(), true));
+            }
         }
     }
 

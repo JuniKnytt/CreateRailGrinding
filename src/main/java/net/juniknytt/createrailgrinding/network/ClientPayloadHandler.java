@@ -1,6 +1,8 @@
 package net.juniknytt.createrailgrinding.network;
 
 import net.juniknytt.createrailgrinding.client.BalancingPoseTracker;
+import net.juniknytt.createrailgrinding.client.ModKeyMappings;
+import net.juniknytt.createrailgrinding.client.RailGrindAccelTracker;
 import net.juniknytt.createrailgrinding.client.RailGrindClientMotion;
 import net.juniknytt.createrailgrinding.client.RailGrindDebugSyncCache;
 import net.juniknytt.createrailgrinding.client.RailGrindLeanTracker;
@@ -28,6 +30,14 @@ public final class ClientPayloadHandler {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player != null && payload.playerId().equals(mc.player.getUUID())) return;
             RailGrindLeanTracker.setRawSign(payload.playerId(), payload.steerSign());
+        });
+    }
+
+    public static void handleAccelSync(RailGrindAccelSyncPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player != null && payload.playerId().equals(mc.player.getUUID())) return;
+            RailGrindAccelTracker.setAccelerating(payload.playerId(), payload.accelerating());
         });
     }
 
@@ -67,7 +77,7 @@ public final class ClientPayloadHandler {
                 if (mc.player != null && payload.playerId().equals(mc.player.getUUID())) {
                     Component prompt = Component.translatable(
                         "createrailgrinding.dismount_prompt",
-                        mc.options.keyJump.getTranslatedKeyMessage());
+                        ModKeyMappings.GRIND_JUMP.getTranslatedKeyMessage());
                     mc.gui.setOverlayMessage(prompt, false);
                 }
             }

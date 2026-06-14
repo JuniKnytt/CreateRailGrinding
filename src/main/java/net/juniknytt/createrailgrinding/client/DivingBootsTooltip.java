@@ -24,12 +24,16 @@ public final class DivingBootsTooltip {
         if (!(event.getItemStack().getItem() instanceof DivingBootsItem)) return;
         if (!Screen.hasShiftDown()) return;
 
+        String catchKey = ModKeyMappings.CATCH.getTranslatedKeyMessage().getString();
+        String crouchKey = ModKeyMappings.GRIND_CROUCH.getTranslatedKeyMessage().getString();
+        String jumpKey = ModKeyMappings.GRIND_JUMP.getTranslatedKeyMessage().getString();
+
         List<Component> tooltip = event.getToolTip();
         List<Component> header = TooltipHelper.cutStringTextComponent(
                 I18n.get("item.createrailgrinding.diving_boots.tooltip.condition1"),
                 FontHelper.Palette.GRAY_AND_WHITE);
         List<Component> description = TooltipHelper.cutStringTextComponent(
-                I18n.get("item.createrailgrinding.diving_boots.tooltip.behaviour1"),
+                I18n.get("item.createrailgrinding.diving_boots.tooltip.behaviour1", catchKey),
                 FontHelper.Palette.STANDARD_CREATE.primary(),
                 FontHelper.Palette.STANDARD_CREATE.highlight(),
                 1);
@@ -37,7 +41,7 @@ public final class DivingBootsTooltip {
                 I18n.get("item.createrailgrinding.diving_boots.tooltip.condition2"),
                 FontHelper.Palette.GRAY_AND_WHITE);
         List<Component> description2 = TooltipHelper.cutStringTextComponent(
-                I18n.get("item.createrailgrinding.diving_boots.tooltip.behaviour2"),
+                I18n.get("item.createrailgrinding.diving_boots.tooltip.behaviour2", crouchKey, jumpKey),
                 FontHelper.Palette.STANDARD_CREATE.primary(),
                 FontHelper.Palette.STANDARD_CREATE.highlight(),
                 1);

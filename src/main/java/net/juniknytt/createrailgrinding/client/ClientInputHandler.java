@@ -1,12 +1,12 @@
 package net.juniknytt.createrailgrinding.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import com.simibubi.create.content.kinetics.chainConveyor.ChainConveyorRidingHandler;
 import com.simibubi.create.content.trains.track.BezierConnection;
 import com.simibubi.create.content.trains.track.ITrackBlock;
 import com.simibubi.create.content.trains.track.TrackBlockEntity;
 import com.simibubi.create.content.trains.track.TrackBlockOutline;
 import com.simibubi.create.content.trains.track.TrackBlockOutline.BezierPointSelection;
-import net.juniknytt.createrailgrinding.Config;
 import net.juniknytt.createrailgrinding.RailGrind;
 import net.juniknytt.createrailgrinding.client.BalancingPoseTracker;
 import net.juniknytt.createrailgrinding.compat.Mods;
@@ -29,6 +29,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.Items;
@@ -42,6 +43,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
+import org.lwjgl.glfw.GLFW;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -127,7 +129,14 @@ public class ClientInputHandler {
                 return bhr.getLocation();
             }
         }
-        return null;
+
+        Vec3 eye = player.getEyePosition();
+        double range = player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE);
+        if (mc.hitResult != null && mc.hitResult.getType() != HitResult.Type.MISS) {
+            range = Math.min(range, eye.distanceTo(mc.hitResult.getLocation()));
+        }
+        Vec3 target = eye.add(player.getViewVector(1.0F).scale(range));
+        return RailGrindHandler.pickGrindableCurvePointOnRay(player.level(), eye, target, CURVE_PICK_MAX_DIST_SQ);
     }
 
     private static final double CURVE_PICK_MAX_DIST_SQ = 0.25;
@@ -286,7 +295,7 @@ public class ClientInputHandler {
             prevJumpInput = false;
             return;
         }
-        boolean jump = capturedJumpingInput;
+        boolean jump = isBindingHeld(ModKeyMappings.GRIND_JUMP);
         boolean pressed  =  jump && !prevJumpInput;
         boolean released = !jump &&  prevJumpInput;
         prevJumpInput = jump;
@@ -301,6 +310,9 @@ public class ClientInputHandler {
             chargeStartGameTime = -1L;
 
             PacketDistributor.sendToServer(new StopGrindPayload(Math.max(0, held)));
+            mc.gui.setOverlayMessage(Component.translatable(
+                    "createrailgrinding.catch_prompt",
+                    ModKeyMappings.CATCH.getTranslatedKeyMessage()), false);
         }
     }
 
@@ -331,21 +343,29 @@ public class ClientInputHandler {
     }
 
     private static boolean isMountInputHeld(LocalPlayer player) {
-        if (Config.OVERRIDE_KEYBINDINGS.get()) {
-            if (!ModKeyMappings.isMountOverrideBound()) return false;
+        if (isInputNeutralized(player)) return false;
+        return isBindingHeld(ModKeyMappings.CATCH);
+    }
 
-            if (isInputNeutralized(player)) return false;
-            return ModKeyMappings.RAIL_MOUNT_OVERRIDE.isDown();
-        }
+    private static boolean isBindingHeld(net.minecraft.client.KeyMapping mapping) {
+        if (mapping.isUnbound()) return false;
+        if (!mapping.getKeyConflictContext().isActive()) return false;
+        if (!mapping.getKeyModifier().isActive(mapping.getKeyConflictContext())) return false;
+        InputConstants.Key key = mapping.getKey();
+        long window = Minecraft.getInstance().getWindow().getWindow();
+        return switch (key.getType()) {
+            case KEYSYM -> InputConstants.isKeyDown(window, key.getValue());
+            case MOUSE -> GLFW.glfwGetMouseButton(window, key.getValue()) == GLFW.GLFW_PRESS;
+            default -> mapping.isDown();
+        };
+    }
 
-        return capturedJumpingInput && capturedShiftInput;
+    public static boolean isAccelerateHeld(LocalPlayer player) {
+        if (isInputNeutralized(player)) return false;
+        return isBindingHeld(ModKeyMappings.GRIND_CROUCH);
     }
 
     private static volatile int capturedSteerInput = 0;
-
-    private static volatile boolean capturedJumpingInput = false;
-
-    private static volatile boolean capturedShiftInput = false;
 
     public static int getSteerInput() {
         return capturedSteerInput;
@@ -362,8 +382,6 @@ public class ClientInputHandler {
         capturedSteerInput =
                 (input.left  ? -1 : 0)
               + (input.right ? +1 : 0);
-        capturedJumpingInput = input.jumping;
-        capturedShiftInput = input.shiftKeyDown;
 
         if (!BalancingPoseTracker.isBalancing(event.getEntity())) return;
 
@@ -444,17 +462,18 @@ public class ClientInputHandler {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null) return;
-        byte mode;
-        if (isInputNeutralized(player)) {
 
-            mode = GrindAccelInputPayload.OVERRIDE_OFF;
-        } else if (Config.OVERRIDE_KEYBINDINGS.get() && ModKeyMappings.isAccelOverrideBound()) {
-            mode = ModKeyMappings.GRIND_CROUCH_ACCELERATE_OVERRIDE.isDown()
-                    ? GrindAccelInputPayload.OVERRIDE_ON
-                    : GrindAccelInputPayload.OVERRIDE_OFF;
-        } else {
-            mode = GrindAccelInputPayload.VANILLA;
+        boolean balancing = BalancingPoseTracker.isBalancing(player);
+        boolean held = balancing && isAccelerateHeld(player);
+        RailGrindAccelTracker.setAccelerating(player.getUUID(), held);
+
+        if (!balancing) {
+
+            lastSentAccelMode = GrindAccelInputPayload.VANILLA;
+            return;
         }
+
+        byte mode = held ? GrindAccelInputPayload.OVERRIDE_ON : GrindAccelInputPayload.OVERRIDE_OFF;
         if (mode == lastSentAccelMode) return;
         PacketDistributor.sendToServer(new GrindAccelInputPayload(mode));
         lastSentAccelMode = mode;
@@ -499,8 +518,6 @@ public class ClientInputHandler {
         chargeStartGameTime = -1L;
         prevJumpInput = false;
         capturedSteerInput = 0;
-        capturedJumpingInput = false;
-        capturedShiftInput = false;
     }
 
     private static void clearClientGrindState(LocalPlayer player) {
@@ -508,14 +525,13 @@ public class ClientInputHandler {
         GrindSoundController.clearAll();
         RailGrindClientMotion.clearTarget();
         RailGrindLeanTracker.clearAll();
+        RailGrindAccelTracker.clearAll();
         lastSentSteer = 0;
         lastSentAccelMode = GrindAccelInputPayload.VANILLA;
         lastChainMounted = false;
         chargeStartGameTime = -1L;
         prevJumpInput = false;
         capturedSteerInput = 0;
-        capturedJumpingInput = false;
-        capturedShiftInput = false;
 
         pendingCrossDimGraceAck = false;
         if (player != null) {

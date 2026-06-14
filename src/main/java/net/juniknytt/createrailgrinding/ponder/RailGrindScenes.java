@@ -4,6 +4,7 @@ import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
 
 import net.createmod.catnip.math.Pointing;
+import net.juniknytt.createrailgrinding.client.ModKeyMappings;
 import net.createmod.ponder.api.element.ElementLink;
 import net.createmod.ponder.api.element.ParrotElement;
 import net.createmod.ponder.api.element.ParrotPose;
@@ -23,6 +24,10 @@ public final class RailGrindScenes {
     private RailGrindScenes() {}
 
     public static void intro(SceneBuilder scene, SceneBuildingUtil util) {
+
+        String catchKey = ModKeyMappings.CATCH.getTranslatedKeyMessage().getString();
+        String crouchKey = ModKeyMappings.GRIND_CROUCH.getTranslatedKeyMessage().getString();
+        String jumpKey = ModKeyMappings.GRIND_JUMP.getTranslatedKeyMessage().getString();
 
         scene.title("rail_grinding_intro", "Rail Grinding");
         scene.configureBasePlate(0, 0, 15);
@@ -46,7 +51,7 @@ public final class RailGrindScenes {
                 .pointAt(new Vec3(7.5, 2.5, 12.5))
                 .placeNearTarget()
                 .attachKeyFrame()
-                .text("Diving Boots are suitable Grind Shoes and can used for Rail-Grinding");
+                .text("Diving Boots are suitable Grind Shoes and can used for Rail Grinding");
         scene.idle(60);
 
         Vec3 parrotStart = new Vec3(1.5, 2.0, 7.5);
@@ -64,7 +69,7 @@ public final class RailGrindScenes {
                 .pointAt(new Vec3(1.5, 3.0, 7.5))
                 .placeNearTarget()
                 .attachKeyFrame()
-                .text("Right-click Train Tracks with an empty hand to start Rail-Grinding");
+                .text("Right-click Train Tracks with an empty hand to start Rail Grinding");
         scene.idle(80);
 
         scene.special().changeBirbPose(parrot, WingsOutFacingPose::new);
@@ -79,7 +84,7 @@ public final class RailGrindScenes {
                 .pointAt(new Vec3(11.3, 3.0, 7.5))
                 .placeNearTarget()
                 .attachKeyFrame()
-                .text("Right-click Train Tracks with an empty hand to stop Rail-Grinding");
+                .text("Right-click Train Tracks with an empty hand to stop Rail Grinding");
         scene.idle(20);
         scene.special().movePointOfInterest(util.grid().at(-20, 2, 7));
         scene.special().changeBirbPose(parrot, WingsDownFacingPose::new);
@@ -90,12 +95,12 @@ public final class RailGrindScenes {
                 .pointAt(new Vec3(11.3, 3.0, 7.5))
                 .placeNearTarget()
                 .attachKeyFrame()
-                .text("Sneak and Jump near Train Tracks is another way to start Rail-Grinding");
+                .text("%1$s near Train Tracks is another way to start Rail Grinding", catchKey);
         scene.special().movePointOfInterest(util.grid().at(-20, 2, 7));
         scene.special().changeBirbPose(parrot, WingsDownFacingPose::new);
 
         scene.overlay().showControls(util.vector().of(11.3, 3, 7.5), Pointing.DOWN, 60)
-                .showing(SneakJumpKeyHint.SNEAKPLUSJUMP);
+                .showing(CatchKeyHint.CATCH);
         scene.idle(60);
         scene.special().changeBirbPose(parrot, WingsOutFacingPose::new);
         scene.special().moveParrot(parrot, util.vector().of(-10, 0, 0), 80);
@@ -108,10 +113,10 @@ public final class RailGrindScenes {
                 .pointAt(new Vec3(1.5, 3.0, 7.5))
                 .placeNearTarget()
                 .attachKeyFrame()
-                .text("Hold Sneak to Speed up");
+                .text("Hold %1$s to Speed up", crouchKey);
         scene.idle(20);
         scene.overlay().showControls(util.vector().of(1.5, 3, 7.5), Pointing.DOWN, 60)
-                .showing(SneakKeyHint.SNEAK);
+                .showing(CrouchKeyHint.CROUCH);
         scene.idle(20);
 
         scene.special().changeBirbPose(parrot, WingsOutFacingPose::new);
@@ -125,7 +130,7 @@ public final class RailGrindScenes {
                 .pointAt(new Vec3(11.3, 3.0, 7.5))
                 .placeNearTarget()
                 .attachKeyFrame()
-                .text("Hold and Release Jump to leap off Rails");
+                .text("Hold and Release %1$s to leap off Rails", jumpKey);
         scene.special().changeBirbPose(parrot, WingsDownFacingPose::new);
 
         scene.overlay().showControls(util.vector().of(11.3, 3, 7.5), Pointing.DOWN, 60)
@@ -159,7 +164,7 @@ public final class RailGrindScenes {
         scene.overlay().showText(160)
                 .independent()
                 .attachKeyFrame()
-                .text("Holding Shift+Sneak will automatically make you latch on to Rails");
+                .text("Holding %1$s will automatically make you latch on to Rails", catchKey);
         scene.idle(40);
         scene.overlay().showText(120)
                 .independent(40)

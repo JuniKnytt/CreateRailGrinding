@@ -1,0 +1,30 @@
+{
+  "parent": "createrailgrinding:railgrind_advancement",
+  "criteria": {
+    "obtain_custom_boots": {
+      "trigger": "createrailgrinding:obtain_custom_boots"
+    }
+  },
+  "display": {
+    "announce_to_chat": true,
+    "show_toast": true,
+    "hidden": true,
+    "description": {
+      "color": "#DBA213",
+      "translate": "advancement.createrailgrinding.custom_boots_advancement.desc"
+    },
+    "icon": {
+      "count": 1,
+      "id": "minecraft:blue_wool"
+    },
+    "title": {
+      "translate": "advancement.createrailgrinding.custom_boots_advancement"
+    }
+  },
+  "requirements": [
+    [
+      "obtain_custom_boots"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

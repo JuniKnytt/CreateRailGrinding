@@ -4,14 +4,14 @@ import net.createmod.catnip.gui.element.ScreenElement;
 import net.juniknytt.createrailgrinding.client.ModKeyMappings;
 import net.minecraft.client.gui.GuiGraphics;
 
-public final class JumpKeyHint implements ScreenElement {
+public final class CrouchKeyHint implements ScreenElement {
 
-    public static final ScreenElement JUMP = new JumpKeyHint();
+    public static final ScreenElement CROUCH = new CrouchKeyHint();
 
-    private JumpKeyHint() {}
+    private CrouchKeyHint() {}
 
     @Override
     public void render(GuiGraphics graphics, int x, int y) {
-        KeyHintRenderer.render(graphics, ModKeyMappings.GRIND_JUMP.getTranslatedKeyMessage().getString());
+        KeyHintRenderer.render(graphics, ModKeyMappings.GRIND_CROUCH.getTranslatedKeyMessage().getString());
     }
 }

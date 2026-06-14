@@ -3,6 +3,7 @@ package net.juniknytt.createrailgrinding.mixin.client;
 import net.juniknytt.createrailgrinding.client.BalancingPoseTracker;
 import net.juniknytt.createrailgrinding.client.ClientInputHandler;
 import net.juniknytt.createrailgrinding.client.HandRenderTracker;
+import net.juniknytt.createrailgrinding.client.RailGrindAccelTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.PlayerModel;
@@ -50,7 +51,7 @@ public abstract class PlayerModelMixin extends HumanoidModel<LivingEntity> {
         float wobbleX = Mth.sin(ageInTicks * 0.31F) * 0.01F;
         float armWobble = Mth.sin(ageInTicks * 0.22F) * 0.1F;
 
-        boolean useBoostPose = player.isShiftKeyDown()
+        boolean useBoostPose = RailGrindAccelTracker.isAccelerating(player.getUUID())
             || (entity == Minecraft.getInstance().player && ClientInputHandler.isCharging());
 
         if (useBoostPose) {

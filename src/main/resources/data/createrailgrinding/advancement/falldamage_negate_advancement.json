@@ -1,0 +1,31 @@
+{
+  "parent": "createrailgrinding:railgrind_advancement",
+  "criteria": {
+    "negate_lethal_fall": {
+      "trigger": "createrailgrinding:falldamage_negate"
+    }
+  },
+  "display": {
+    "announce_to_chat": true,
+    "show_toast": true,
+    "hidden": true,
+    "frame": "challenge",
+    "description": {
+      "color": "#DBA213",
+      "translate": "advancement.createrailgrinding.falldamage_negate_advancement.desc"
+    },
+    "icon": {
+      "count": 1,
+      "id": "create:netherite_diving_boots"
+    },
+    "title": {
+      "translate": "advancement.createrailgrinding.falldamage_negate_advancement"
+    }
+  },
+  "requirements": [
+    [
+      "negate_lethal_fall"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

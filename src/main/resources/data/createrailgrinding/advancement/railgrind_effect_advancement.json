@@ -1,0 +1,30 @@
+{
+  "parent": "createrailgrinding:railgrind_advancement",
+  "criteria": {
+    "railgrind_with_effect": {
+      "trigger": "createrailgrinding:railgrind_effect"
+    }
+  },
+  "display": {
+    "announce_to_chat": true,
+    "show_toast": true,
+    "frame": "goal",
+    "description": {
+      "color": "#DBA213",
+      "translate": "advancement.createrailgrinding.railgrind_effect_advancement.desc"
+    },
+    "icon": {
+      "count": 1,
+      "id": "create:bar_of_chocolate"
+    },
+    "title": {
+      "translate": "advancement.createrailgrinding.railgrind_effect_advancement"
+    }
+  },
+  "requirements": [
+    [
+      "railgrind_with_effect"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

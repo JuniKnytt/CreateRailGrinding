@@ -2,6 +2,8 @@ package net.juniknytt.createrailgrinding.event;
 
 import net.juniknytt.createrailgrinding.Config;
 import net.juniknytt.createrailgrinding.RailGrind;
+import net.juniknytt.createrailgrinding.advancement.ModTriggers;
+import net.juniknytt.createrailgrinding.cosmetic.CustomBootSkin;
 import net.juniknytt.createrailgrinding.effect.ModEffects;
 import net.juniknytt.createrailgrinding.enchantment.ModEnchantments;
 import net.juniknytt.createrailgrinding.rail.RailGrindHandler;
@@ -11,6 +13,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.EventPriority;
@@ -43,6 +46,30 @@ public class ModEvents
         if (Config.SYNC_DEBUG_TO_CLIENTS.get() && player instanceof ServerPlayer sp) {
             RailGrindHandler.broadcastDebugSnapshot(sp);
         }
+    }
+
+    @SubscribeEvent
+    public static void onPlayerTickGrantBootsAdvancement(PlayerTickEvent.Post event) {
+        if (!(event.getEntity() instanceof ServerPlayer sp)) return;
+        if (sp.tickCount % 20 != 0) return;
+        if (!hasCustomBoots(sp)) return;
+        ModTriggers.OBTAIN_CUSTOM_BOOTS.get().trigger(sp);
+    }
+
+    @SubscribeEvent
+    public static void onPlayerTickGrantEffectAdvancement(PlayerTickEvent.Post event) {
+        if (!(event.getEntity() instanceof ServerPlayer sp)) return;
+        if (!RailGrindHandler.isGrinding(sp)) return;
+        if (!sp.hasEffect(ModEffects.SONIC_WIND)) return;
+        ModTriggers.RAIL_GRIND_EFFECT.get().trigger(sp);
+    }
+
+    private static boolean hasCustomBoots(ServerPlayer sp) {
+        Inventory inventory = sp.getInventory();
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            if (CustomBootSkin.matches(inventory.getItem(i))) return true;
+        }
+        return false;
     }
 
     @SubscribeEvent

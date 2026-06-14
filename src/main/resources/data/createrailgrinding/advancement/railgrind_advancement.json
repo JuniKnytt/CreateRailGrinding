@@ -1,0 +1,29 @@
+{
+  "parent": "create:track_0",
+  "criteria": {
+    "rode_rails": {
+      "trigger": "createrailgrinding:rail_grind"
+    }
+  },
+  "display": {
+    "announce_to_chat": true,
+    "show_toast": true,
+    "description": {
+      "color": "#DBA213",
+      "translate": "advancement.createrailgrinding.railgrind_advancement.desc"
+    },
+    "icon": {
+      "count": 1,
+      "id": "create:copper_diving_boots"
+    },
+    "title": {
+      "translate": "advancement.createrailgrinding.railgrind_advancement"
+    }
+  },
+  "requirements": [
+    [
+      "rode_rails"
+    ]
+  ],
+  "sends_telemetry_event": false
+}

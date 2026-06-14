@@ -82,6 +82,7 @@ public class RailGrind {
         net.juniknytt.createrailgrinding.sound.ModSounds.register(modBus);
         net.juniknytt.createrailgrinding.effect.ModEffects.register(modBus);
         net.juniknytt.createrailgrinding.particle.ModParticles.register(modBus);
+        net.juniknytt.createrailgrinding.advancement.ModTriggers.register(modBus);
         container.registerConfig(ModConfig.Type.CLIENT, Config.SPEC);
         container.registerConfig(ModConfig.Type.SERVER, Config.SERVER_SPEC);
     }

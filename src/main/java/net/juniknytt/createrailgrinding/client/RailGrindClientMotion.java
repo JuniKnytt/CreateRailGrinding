@@ -71,6 +71,10 @@ public final class RailGrindClientMotion {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null) return;
+        if (mc.isPaused()) {
+            resetBlockedDetectionState();
+            return;
+        }
         if (!BalancingPoseTracker.isBalancing(player)) {
 
             if (target != null || smoothedTarget != null) clearTarget();

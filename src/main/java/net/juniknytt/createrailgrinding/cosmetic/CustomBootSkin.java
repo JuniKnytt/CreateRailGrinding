@@ -40,6 +40,7 @@ public final class CustomBootSkin {
             "sonic adventure 2 boots",
             "sonic adventure 2 battle boots",
 
+            "rollin at the speed of sound",
             "rollin around at the speed of sound",
             "rolling around at the speed of sound",
 
@@ -59,6 +60,15 @@ public final class CustomBootSkin {
             "rail-grind boots",
             "rail-grinding shoes",
             "rail-grinding boots",
+
+            "faker",
+            "faker boots",
+            "faker shoes",
+            "blue wind",
+            "blue blur",
+            "sonic the hedgehog",
+            "sonic the hedgehog boots",
+            "sonic the hedgehog shoes",
 
             "gotta go fast",
             "got to go fast"
