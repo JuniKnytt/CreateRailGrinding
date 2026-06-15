@@ -15,7 +15,6 @@ import com.simibubi.create.content.trains.track.BezierTrackPointLocation;
 import com.simibubi.create.content.trains.track.ITrackBlock;
 import com.simibubi.create.content.trains.track.TrackBlockEntity;
 import com.simibubi.create.content.trains.track.TrackMaterial;
-import com.simibubi.create.infrastructure.config.AllConfigs;
 import net.createmod.catnip.data.Couple;
 import net.createmod.catnip.math.BlockFace;
 import net.juniknytt.createrailgrinding.Config;
@@ -827,8 +826,9 @@ public final class RailGrindHandler {
 
     private static final double GRAPH_SCAN_SAMPLES_PER_BLOCK = 4.0;
     private static final int GRAPH_SCAN_MIN_SAMPLES = 8;
-    private static final int GRAPH_SCAN_ABS_MAX_SAMPLES = 8192;
-    private static final int GRAPH_SCAN_FALLBACK_MAX_RAIL_LENGTH = 256;
+    private static final int GRAPH_SCAN_MAX_RAIL_LENGTH = 32;
+    private static final int GRAPH_SCAN_MAX_SAMPLES =
+            Math.max(GRAPH_SCAN_MIN_SAMPLES, (int) Math.ceil(GRAPH_SCAN_MAX_RAIL_LENGTH * GRAPH_SCAN_SAMPLES_PER_BLOCK));
 
     public record RailHit(TrackGraphLocation loc, @Nullable SableSubLevels.SubLevelHandle subLevel) {}
 
@@ -975,7 +975,7 @@ public final class RailGrindHandler {
 
         ResourceKey<Level> dimension = level.dimension();
         Collection<TrackGraph> graphs = Create.RAILWAYS.sided(level).trackNetworks.values();
-        int maxSamples = graphScanMaxSamples();
+        int maxSamples = GRAPH_SCAN_MAX_SAMPLES;
 
         for (TrackGraph graph : graphs) {
             AABB graphBox;
@@ -1014,6 +1014,8 @@ public final class RailGrindHandler {
                             : new AABB(node.getLocation().getLocation(), other.getLocation().getLocation());
                     if (!edgeBox.inflate(Math.sqrt(candidateCap)).contains(originInLevel)) continue;
 
+                    if (!graphEdgeHasRealBacking(level, node, other, conn != null)) continue;
+
                     int samples = (int) Math.ceil(edgeLen * GRAPH_SCAN_SAMPLES_PER_BLOCK);
                     samples = Math.max(GRAPH_SCAN_MIN_SAMPLES, Math.min(maxSamples, samples));
 
@@ -1039,24 +1041,35 @@ public final class RailGrindHandler {
         }
     }
 
-    public static int maxRailLengthBlocks() {
-        try {
-            return Math.max(1, AllConfigs.server().trains.maxTrackPlacementLength.get());
-        } catch (Throwable t) {
-            return GRAPH_SCAN_FALLBACK_MAX_RAIL_LENGTH;
+    private static final int ENDPOINT_PROBE_DY = 5;
+
+    private static boolean loadedTrackBlockNear(Level level, Vec3 worldPoint) {
+        BlockPos base = BlockPos.containing(worldPoint);
+        for (int dy = -ENDPOINT_PROBE_DY; dy <= ENDPOINT_PROBE_DY; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    BlockPos p = base.offset(dx, dy, dz);
+                    if (level.isLoaded(p) && level.getBlockState(p).getBlock() instanceof ITrackBlock) {
+                        return true;
+                    }
+                }
+            }
         }
+        return false;
     }
 
-    private static int graphScanMaxSamples() {
-        int byLength = (int) Math.ceil(maxRailLengthBlocks() * GRAPH_SCAN_SAMPLES_PER_BLOCK);
-        return Math.max(GRAPH_SCAN_MIN_SAMPLES, Math.min(GRAPH_SCAN_ABS_MAX_SAMPLES, byLength));
+    private static boolean graphEdgeHasRealBacking(Level level, TrackNode from, TrackNode to, boolean isTurn) {
+        Vec3 a = from.getLocation().getLocation();
+        Vec3 b = to.getLocation().getLocation();
+        if (loadedTrackBlockNear(level, a) || loadedTrackBlockNear(level, b)) return true;
+        return !isTurn && loadedTrackBlockNear(level, a.add(b).scale(0.5));
     }
 
     @Nullable
     public static Vec3 pickGrindableCurvePointOnRay(Level level, Vec3 eye, Vec3 target, double maxDistSq) {
         ResourceKey<Level> dimension = level.dimension();
         Collection<TrackGraph> graphs = Create.RAILWAYS.sided(level).trackNetworks.values();
-        int maxSamples = graphScanMaxSamples();
+        int maxSamples = GRAPH_SCAN_MAX_SAMPLES;
         double tolReach = Math.sqrt(maxDistSq);
 
         Vec3 best = null;

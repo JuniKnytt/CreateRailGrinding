@@ -119,8 +119,6 @@ public class ClientInputHandler {
 
     @Nullable
     private static Vec3 computeInteractionEnd(Minecraft mc, LocalPlayer player) {
-        BezierPointSelection createCurve = TrackBlockOutline.result;
-        if (createCurve != null) return createCurve.vec();
         if (mc.hitResult instanceof BlockHitResult bhr && bhr.getType() == HitResult.Type.BLOCK) {
             BlockPos pos = bhr.getBlockPos();
             BlockState state = player.level().getBlockState(pos);
@@ -131,15 +129,22 @@ public class ClientInputHandler {
         }
 
         Vec3 eye = player.getEyePosition();
-        double range = player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE);
-        if (mc.hitResult != null && mc.hitResult.getType() != HitResult.Type.MISS) {
-            range = Math.min(range, eye.distanceTo(mc.hitResult.getLocation()));
-        }
+        double range = Math.max(player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE), GRIND_START_CURVE_REACH);
         Vec3 target = eye.add(player.getViewVector(1.0F).scale(range));
-        return RailGrindHandler.pickGrindableCurvePointOnRay(player.level(), eye, target, CURVE_PICK_MAX_DIST_SQ);
+        Vec3 ours = RailGrindHandler.pickGrindableCurvePointOnRay(player.level(), eye, target, CURVE_PICK_MAX_DIST_SQ);
+        if (ours != null) return ours;
+
+        BezierPointSelection createCurve = TrackBlockOutline.result;
+        if (createCurve != null) {
+            Vec3 v = createCurve.vec();
+            if (v != null && v.distanceToSqr(player.position()) <= GRIND_START_MAX_TELEPORT_DIST_SQ) return v;
+        }
+        return null;
     }
 
     private static final double CURVE_PICK_MAX_DIST_SQ = 0.25;
+    private static final double GRIND_START_CURVE_REACH = 8.0;
+    private static final double GRIND_START_MAX_TELEPORT_DIST_SQ = 100.0;
 
     private static boolean hasSubLevelCurveAtCrosshair(Minecraft mc, LocalPlayer player) {
         if (!Mods.SABLE.isLoaded()) return false;

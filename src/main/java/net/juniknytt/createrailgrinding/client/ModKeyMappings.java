@@ -22,7 +22,12 @@ public final class ModKeyMappings {
             KeyModifier.SHIFT,
             InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_SPACE),
             CATEGORY
-    );
+    ) {
+        @Override
+        public boolean isActiveAndMatches(InputConstants.Key keyCode) {
+            return false;
+        }
+    };
 
     public static final KeyMapping GRIND_JUMP = new KeyMapping(
             "key." + RailGrind.MODID + ".grind_jump",
