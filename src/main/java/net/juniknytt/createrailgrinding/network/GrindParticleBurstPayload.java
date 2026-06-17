@@ -1,38 +1,38 @@
 package net.juniknytt.createrailgrinding.network;
 
-import io.netty.buffer.ByteBuf;
-import net.juniknytt.createrailgrinding.RailGrind;
-import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
+import net.minecraftforge.network.NetworkEvent;
 
 import java.util.UUID;
+import java.util.function.Supplier;
 
 public record GrindParticleBurstPayload(UUID playerId,
                                         float tangentX, float tangentY, float tangentZ,
                                         float speedRatio,
-                                        byte count) implements CustomPacketPayload {
-    public static final Type<GrindParticleBurstPayload> TYPE = new Type<>(
-        ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "grind_particle_burst"));
+                                        byte count) {
+    public void encode(FriendlyByteBuf buf) {
+        buf.writeUUID(playerId);
+        buf.writeFloat(tangentX);
+        buf.writeFloat(tangentY);
+        buf.writeFloat(tangentZ);
+        buf.writeFloat(speedRatio);
+        buf.writeByte(count);
+    }
 
-    public static final StreamCodec<ByteBuf, GrindParticleBurstPayload> STREAM_CODEC = StreamCodec.of(
-        (buf, p) -> {
-            UUIDUtil.STREAM_CODEC.encode(buf, p.playerId);
-            buf.writeFloat(p.tangentX);
-            buf.writeFloat(p.tangentY);
-            buf.writeFloat(p.tangentZ);
-            buf.writeFloat(p.speedRatio);
-            buf.writeByte(p.count);
-        },
-        buf -> new GrindParticleBurstPayload(
-            UUIDUtil.STREAM_CODEC.decode(buf),
-            buf.readFloat(), buf.readFloat(), buf.readFloat(),
-            buf.readFloat(),
-            buf.readByte()
-        )
-    );
+    public static GrindParticleBurstPayload decode(FriendlyByteBuf buf) {
+        return new GrindParticleBurstPayload(
+                buf.readUUID(),
+                buf.readFloat(), buf.readFloat(), buf.readFloat(),
+                buf.readFloat(),
+                buf.readByte());
+    }
 
-    @Override
-    public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    public void handleClient(Supplier<NetworkEvent.Context> ctx) {
+        NetworkEvent.Context context = ctx.get();
+        context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
+                () -> () -> ClientPayloadHandler.handleParticleBurst(this)));
+        context.setPacketHandled(true);
+    }
 }

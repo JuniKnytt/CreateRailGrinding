@@ -7,14 +7,14 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
+import net.juniknytt.createrailgrinding.network.ModNetworking;
 import org.jetbrains.annotations.Nullable;
 
-@EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
+@Mod.EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
 public final class RailGrindClientMotion {
 
     private static final double MAX_STEP = 2.0;
@@ -67,7 +67,8 @@ public final class RailGrindClientMotion {
     }
 
     @SubscribeEvent
-    public static void onClientTickPre(ClientTickEvent.Pre event) {
+    public static void onClientTickPre(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.START) return;
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null) return;
@@ -162,7 +163,7 @@ public final class RailGrindClientMotion {
         if (tickBlocked) {
             blockedTicks++;
             if (blockedTicks >= BLOCKED_DROP_TICKS) {
-                PacketDistributor.sendToServer(BlockedByObstaclePayload.INSTANCE);
+                ModNetworking.toServer(BlockedByObstaclePayload.INSTANCE);
                 blockedDispatched = true;
                 blockedTicks = 0;
             }

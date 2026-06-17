@@ -4,12 +4,12 @@ import net.juniknytt.createrailgrinding.Config;
 import net.juniknytt.createrailgrinding.RailGrind;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ViewportEvent;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.ViewportEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 
-@EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
+@Mod.EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
 public final class RailGrindCameraRoll {
 
     private static final float LEAN_ROLL_DEG = 10.0f;

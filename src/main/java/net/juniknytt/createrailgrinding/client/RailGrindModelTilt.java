@@ -3,10 +3,10 @@ package net.juniknytt.createrailgrinding.client;
 import net.juniknytt.createrailgrinding.RailGrind;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 import org.joml.Quaternionf;
 
 import java.util.HashMap;
@@ -14,7 +14,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
 
-@EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
+@Mod.EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
 public final class RailGrindModelTilt {
 
     private static final double HORIZ_EPSILON_SQ = 1.0e-6;
@@ -38,7 +38,8 @@ public final class RailGrindModelTilt {
     }
 
     @SubscribeEvent
-    public static void onClientTickPost(ClientTickEvent.Post event) {
+    public static void onClientTickPost(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) {
 

@@ -15,8 +15,7 @@
       "translate": "advancement.createrailgrinding.falldamage_negate_advancement.desc"
     },
     "icon": {
-      "count": 1,
-      "id": "create:netherite_diving_boots"
+      "item": "create:netherite_diving_boots"
     },
     "title": {
       "translate": "advancement.createrailgrinding.falldamage_negate_advancement"

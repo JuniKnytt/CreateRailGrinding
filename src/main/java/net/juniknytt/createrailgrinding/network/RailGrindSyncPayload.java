@@ -1,27 +1,28 @@
 package net.juniknytt.createrailgrinding.network;
 
-import io.netty.buffer.ByteBuf;
-import net.juniknytt.createrailgrinding.RailGrind;
-import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
+import net.minecraftforge.network.NetworkEvent;
 
 import java.util.UUID;
+import java.util.function.Supplier;
 
-public record RailGrindSyncPayload(UUID playerId, boolean grinding, boolean silent) implements CustomPacketPayload {
-    public static final Type<RailGrindSyncPayload> TYPE = new Type<>(
-        ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "rail_grind_sync"));
+public record RailGrindSyncPayload(UUID playerId, boolean grinding, boolean silent) {
+    public void encode(FriendlyByteBuf buf) {
+        buf.writeUUID(playerId);
+        buf.writeBoolean(grinding);
+        buf.writeBoolean(silent);
+    }
 
-    public static final StreamCodec<ByteBuf, RailGrindSyncPayload> STREAM_CODEC = StreamCodec.composite(
-        UUIDUtil.STREAM_CODEC, RailGrindSyncPayload::playerId,
-        ByteBufCodecs.BOOL, RailGrindSyncPayload::grinding,
-        ByteBufCodecs.BOOL, RailGrindSyncPayload::silent,
-        RailGrindSyncPayload::new);
+    public static RailGrindSyncPayload decode(FriendlyByteBuf buf) {
+        return new RailGrindSyncPayload(buf.readUUID(), buf.readBoolean(), buf.readBoolean());
+    }
 
-    @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+    public void handleClient(Supplier<NetworkEvent.Context> ctx) {
+        NetworkEvent.Context context = ctx.get();
+        context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
+                () -> () -> ClientPayloadHandler.handleSync(this)));
+        context.setPacketHandled(true);
     }
 }

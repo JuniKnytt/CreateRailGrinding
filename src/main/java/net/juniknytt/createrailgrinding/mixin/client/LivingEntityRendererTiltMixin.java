@@ -22,12 +22,12 @@ public abstract class LivingEntityRendererTiltMixin {
     private static final float LEAN_EPSILON = 1e-4f;
 
     @Inject(
-        method = "setupRotations(Lnet/minecraft/world/entity/LivingEntity;Lcom/mojang/blaze3d/vertex/PoseStack;FFFF)V",
+        method = "setupRotations(Lnet/minecraft/world/entity/LivingEntity;Lcom/mojang/blaze3d/vertex/PoseStack;FFF)V",
         at = @At("HEAD")
     )
     private void createrailgrinding$applyGrindTilt(
             LivingEntity entity, PoseStack poseStack,
-            float ageInTicks, float rotationYaw, float partialTicks, float scale,
+            float ageInTicks, float rotationYaw, float partialTicks,
             CallbackInfo ci) {
         if (!(entity instanceof Player player)) return;
         if (!BalancingPoseTracker.isBalancing(player)) return;

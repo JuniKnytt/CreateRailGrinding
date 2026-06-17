@@ -2,40 +2,28 @@ package net.juniknytt.createrailgrinding.enchantment;
 
 import com.simibubi.create.content.equipment.armor.DivingBootsItem;
 import net.juniknytt.createrailgrinding.RailGrind;
-import net.minecraft.core.Holder;
-import net.minecraft.core.component.DataComponents;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
-import net.minecraft.world.item.enchantment.ItemEnchantments;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.registries.DeferredRegister;
+import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.registries.RegistryObject;
 
 public final class ModEnchantments {
-    public static final ResourceKey<Enchantment> RAILGRIND_ENCHANTMENT = ResourceKey.create(
-            Registries.ENCHANTMENT,
-            ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "railgrind_enchantment"));
+    public static final DeferredRegister<Enchantment> ENCHANTMENTS =
+            DeferredRegister.create(ForgeRegistries.ENCHANTMENTS, RailGrind.MODID);
 
-    private static final ResourceLocation RAILGRIND_ENCHANTMENT_ID = RAILGRIND_ENCHANTMENT.location();
+    public static final RegistryObject<Enchantment> RAILGRIND_ENCHANTMENT =
+            ENCHANTMENTS.register("railgrind_enchantment", RailGrindEnchantment::new);
 
     private ModEnchantments() {}
 
     public static boolean hasRailgrindEnchantment(ItemStack stack) {
         if (stack.isEmpty()) return false;
-        if (containsRailgrind(stack.getEnchantments())) return true;
-        ItemEnchantments stored = stack.get(DataComponents.STORED_ENCHANTMENTS);
-        return stored != null && containsRailgrind(stored);
-    }
-
-    private static boolean containsRailgrind(ItemEnchantments enchantments) {
-        for (Holder<Enchantment> h : enchantments.keySet()) {
-            if (h.unwrapKey().map(ResourceKey::location).filter(RAILGRIND_ENCHANTMENT_ID::equals).isPresent()) {
-                return true;
-            }
-        }
-        return false;
+        return EnchantmentHelper.getItemEnchantmentLevel(RAILGRIND_ENCHANTMENT.get(), stack) > 0;
     }
 
     public static boolean isRailGrindBoots(ItemStack stack) {
@@ -46,5 +34,9 @@ public final class ModEnchantments {
 
     public static boolean isWearingRailGrindBoots(Player player) {
         return isRailGrindBoots(player.getItemBySlot(EquipmentSlot.FEET));
+    }
+
+    public static void register(IEventBus modBus) {
+        ENCHANTMENTS.register(modBus);
     }
 }

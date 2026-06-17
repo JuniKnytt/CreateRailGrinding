@@ -7,28 +7,25 @@ import net.createmod.catnip.animation.LerpedFloat.Chaser;
 import net.createmod.catnip.math.AngleHelper;
 import net.createmod.catnip.placement.PlacementClient;
 import net.juniknytt.createrailgrinding.RailGrind;
-import net.juniknytt.createrailgrinding.client.BalancingPoseTracker;
 import net.juniknytt.createrailgrinding.rail.RailGrindHandler;
-import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.LayeredDraw;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
-import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.RegisterGuiOverlaysEvent;
+import net.minecraftforge.client.event.RenderGuiOverlayEvent;
+import net.minecraftforge.client.gui.overlay.ForgeGui;
+import net.minecraftforge.client.gui.overlay.VanillaGuiOverlay;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 
 public final class GrindSpeedometerOverlay {
-    private static final ResourceLocation OVERLAY_ID =
-        ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "grind_speedometer");
 
     private static final int BAR_SEGMENTS = 18;
     private static final float BAR_CHASE_SPEED = 0.3f;
@@ -41,24 +38,31 @@ public final class GrindSpeedometerOverlay {
 
     private GrindSpeedometerOverlay() {}
 
-    @EventBusSubscriber(modid = RailGrind.MODID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+    @Mod.EventBusSubscriber(modid = RailGrind.MODID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static final class ModBusEvents {
         @SubscribeEvent
-        public static void onRegisterGuiLayers(RegisterGuiLayersEvent event) {
-
-            event.wrapLayer(VanillaGuiLayers.EXPERIENCE_BAR, GrindSpeedometerOverlay::wrapHidden);
-            event.wrapLayer(VanillaGuiLayers.JUMP_METER,     GrindSpeedometerOverlay::wrapHidden);
-
-            event.registerAbove(VanillaGuiLayers.EXPERIENCE_BAR, JumpChargeOverlay.OVERLAY_ID, JumpChargeOverlay::render);
-            event.registerAbove(JumpChargeOverlay.OVERLAY_ID, OVERLAY_ID, GrindSpeedometerOverlay::render);
+        public static void onRegisterOverlays(RegisterGuiOverlaysEvent event) {
+            event.registerAbove(VanillaGuiOverlay.EXPERIENCE_BAR.id(), "jump_charge_bar", JumpChargeOverlay::render);
+            event.registerAbove(new ResourceLocation(RailGrind.MODID, "jump_charge_bar"), "grind_speedometer",
+                    GrindSpeedometerOverlay::render);
         }
     }
 
-    @EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
+    @Mod.EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
     public static final class GameBusEvents {
         @SubscribeEvent
-        public static void onClientTick(ClientTickEvent.Post event) {
+        public static void onClientTick(TickEvent.ClientTickEvent event) {
+            if (event.phase != TickEvent.Phase.END) return;
             tickChasers();
+        }
+
+        @SubscribeEvent
+        public static void onPreOverlay(RenderGuiOverlayEvent.Pre event) {
+            if (!isLocalPlayerGrinding()) return;
+            ResourceLocation id = event.getOverlay().id();
+            if (id.equals(VanillaGuiOverlay.EXPERIENCE_BAR.id()) || id.equals(VanillaGuiOverlay.JUMP_BAR.id())) {
+                event.setCanceled(true);
+            }
         }
     }
 
@@ -87,19 +91,12 @@ public final class GrindSpeedometerOverlay {
         displayedTravelYaw.tickChaser();
     }
 
-    private static LayeredDraw.Layer wrapHidden(LayeredDraw.Layer original) {
-        return (graphics, deltaTracker) -> {
-            if (isLocalPlayerGrinding()) return;
-            original.render(graphics, deltaTracker);
-        };
-    }
-
     private static boolean isLocalPlayerGrinding() {
         LocalPlayer player = Minecraft.getInstance().player;
         return player != null && BalancingPoseTracker.isBalancing(player);
     }
 
-    private static void render(GuiGraphics graphics, DeltaTracker deltaTracker) {
+    private static void render(ForgeGui gui, GuiGraphics graphics, float partialTicks, int width, int height) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.options.hideGui) return;
         if (mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.SPECTATOR) return;
@@ -108,7 +105,6 @@ public final class GrindSpeedometerOverlay {
         Entity camera = mc.getCameraEntity();
         if (camera == null) return;
 
-        float partialTicks = deltaTracker.getGameTimeDeltaPartialTick(false);
         float fill = displayedSpeed.getValue(partialTicks);
 
         PoseStack pose = graphics.pose();

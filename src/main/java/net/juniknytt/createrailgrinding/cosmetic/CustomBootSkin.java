@@ -15,7 +15,7 @@ public final class CustomBootSkin {
 
     public static final TagKey<Item> IS_DIVING_BOOTS = TagKey.create(
             net.minecraft.core.registries.Registries.ITEM,
-            ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "is_diving_boots"));
+            new ResourceLocation(RailGrind.MODID, "is_diving_boots"));
 
     public static final Set<String> NAMES = Set.of(
             "sonic",
@@ -92,7 +92,7 @@ public final class CustomBootSkin {
     }
 
     private static boolean hasMatchingName(ItemStack stack) {
-        if (!stack.has(net.minecraft.core.component.DataComponents.CUSTOM_NAME)) return false;
+        if (!stack.hasCustomHoverName()) return false;
         String name = stack.getHoverName().getString().trim().toLowerCase(Locale.ROOT);
         return NAMES.contains(name);
     }

@@ -1,30 +1,34 @@
 package net.juniknytt.createrailgrinding.advancement;
 
-import com.mojang.serialization.Codec;
-import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.google.gson.JsonObject;
+import net.juniknytt.createrailgrinding.RailGrind;
+import net.minecraft.advancements.critereon.AbstractCriterionTriggerInstance;
 import net.minecraft.advancements.critereon.ContextAwarePredicate;
-import net.minecraft.advancements.critereon.EntityPredicate;
+import net.minecraft.advancements.critereon.DeserializationContext;
 import net.minecraft.advancements.critereon.SimpleCriterionTrigger;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 
-import java.util.Optional;
-
 public class RailGrindEffectTrigger extends SimpleCriterionTrigger<RailGrindEffectTrigger.TriggerInstance> {
+    static final ResourceLocation ID = new ResourceLocation(RailGrind.MODID, "railgrind_effect");
 
     @Override
-    public Codec<TriggerInstance> codec() {
-        return TriggerInstance.CODEC;
+    public ResourceLocation getId() {
+        return ID;
+    }
+
+    @Override
+    protected TriggerInstance createInstance(JsonObject json, ContextAwarePredicate player, DeserializationContext context) {
+        return new TriggerInstance(player);
     }
 
     public void trigger(ServerPlayer player) {
         this.trigger(player, instance -> true);
     }
 
-    public record TriggerInstance(Optional<ContextAwarePredicate> player)
-            implements SimpleCriterionTrigger.SimpleInstance {
-        public static final Codec<TriggerInstance> CODEC = RecordCodecBuilder.create(
-                instance -> instance.group(
-                        EntityPredicate.ADVANCEMENT_CODEC.optionalFieldOf("player").forGetter(TriggerInstance::player)
-                ).apply(instance, TriggerInstance::new));
+    public static class TriggerInstance extends AbstractCriterionTriggerInstance {
+        public TriggerInstance(ContextAwarePredicate player) {
+            super(ID, player);
+        }
     }
 }

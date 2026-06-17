@@ -14,8 +14,7 @@
       "translate": "advancement.createrailgrinding.custom_boots_advancement.desc"
     },
     "icon": {
-      "count": 1,
-      "id": "minecraft:blue_wool"
+      "item": "minecraft:blue_wool"
     },
     "title": {
       "translate": "advancement.createrailgrinding.custom_boots_advancement"

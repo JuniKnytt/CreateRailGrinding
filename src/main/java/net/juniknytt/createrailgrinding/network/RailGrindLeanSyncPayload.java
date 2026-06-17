@@ -1,26 +1,27 @@
 package net.juniknytt.createrailgrinding.network;
 
-import io.netty.buffer.ByteBuf;
-import net.juniknytt.createrailgrinding.RailGrind;
-import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
+import net.minecraftforge.network.NetworkEvent;
 
 import java.util.UUID;
+import java.util.function.Supplier;
 
-public record RailGrindLeanSyncPayload(UUID playerId, byte steerSign) implements CustomPacketPayload {
-    public static final Type<RailGrindLeanSyncPayload> TYPE = new Type<>(
-        ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "rail_grind_lean_sync"));
+public record RailGrindLeanSyncPayload(UUID playerId, byte steerSign) {
+    public void encode(FriendlyByteBuf buf) {
+        buf.writeUUID(playerId);
+        buf.writeByte(steerSign);
+    }
 
-    public static final StreamCodec<ByteBuf, RailGrindLeanSyncPayload> STREAM_CODEC = StreamCodec.composite(
-        UUIDUtil.STREAM_CODEC, RailGrindLeanSyncPayload::playerId,
-        ByteBufCodecs.BYTE, RailGrindLeanSyncPayload::steerSign,
-        RailGrindLeanSyncPayload::new);
+    public static RailGrindLeanSyncPayload decode(FriendlyByteBuf buf) {
+        return new RailGrindLeanSyncPayload(buf.readUUID(), buf.readByte());
+    }
 
-    @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+    public void handleClient(Supplier<NetworkEvent.Context> ctx) {
+        NetworkEvent.Context context = ctx.get();
+        context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
+                () -> () -> ClientPayloadHandler.handleLeanSync(this)));
+        context.setPacketHandled(true);
     }
 }

@@ -1,19 +1,13 @@
 package net.juniknytt.createrailgrinding.network;
 
-import io.netty.buffer.ByteBuf;
-import net.juniknytt.createrailgrinding.RailGrind;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.network.FriendlyByteBuf;
 
-public record ChainMountedPayload() implements CustomPacketPayload {
+public record ChainMountedPayload() {
     public static final ChainMountedPayload INSTANCE = new ChainMountedPayload();
 
-    public static final Type<ChainMountedPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "chain_mounted"));
+    public void encode(FriendlyByteBuf buf) {}
 
-    public static final StreamCodec<ByteBuf, ChainMountedPayload> STREAM_CODEC = StreamCodec.unit(INSTANCE);
-
-    @Override
-    public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    public static ChainMountedPayload decode(FriendlyByteBuf buf) {
+        return INSTANCE;
+    }
 }

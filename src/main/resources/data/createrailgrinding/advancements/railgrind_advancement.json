@@ -13,8 +13,7 @@
       "translate": "advancement.createrailgrinding.railgrind_advancement.desc"
     },
     "icon": {
-      "count": 1,
-      "id": "create:copper_diving_boots"
+      "item": "create:copper_diving_boots"
     },
     "title": {
       "translate": "advancement.createrailgrinding.railgrind_advancement"

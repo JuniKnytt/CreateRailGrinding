@@ -8,14 +8,14 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.LocalPlayer;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.RenderGuiEvent;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.RenderGuiEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 
 import java.util.Locale;
 
-@EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
+@Mod.EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
 public final class RailGrindDebugHud {
     private static final int X_PAD = 4;
     private static final int Y_PAD = 4;

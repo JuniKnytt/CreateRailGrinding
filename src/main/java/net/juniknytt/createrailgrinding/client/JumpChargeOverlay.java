@@ -6,25 +6,21 @@ import net.createmod.catnip.animation.LerpedFloat;
 import net.createmod.catnip.animation.LerpedFloat.Chaser;
 import net.juniknytt.createrailgrinding.RailGrind;
 import net.juniknytt.createrailgrinding.rail.RailGrindHandler;
-import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.GameType;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.gui.overlay.ForgeGui;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 
 public final class JumpChargeOverlay {
-
-    static final ResourceLocation OVERLAY_ID =
-        ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "jump_charge_bar");
 
     private static final int BAR_PIPES = 30;
 
@@ -41,10 +37,11 @@ public final class JumpChargeOverlay {
 
     private JumpChargeOverlay() {}
 
-    @EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
+    @Mod.EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
     public static final class GameBusEvents {
         @SubscribeEvent
-        public static void onClientTick(ClientTickEvent.Post event) {
+        public static void onClientTick(TickEvent.ClientTickEvent event) {
+            if (event.phase != TickEvent.Phase.END) return;
             tickChaser();
         }
     }
@@ -99,12 +96,11 @@ public final class JumpChargeOverlay {
         return (r << 16) | (g << 8) | b;
     }
 
-    static void render(GuiGraphics graphics, DeltaTracker deltaTracker) {
+    static void render(ForgeGui gui, GuiGraphics graphics, float partialTicks, int width, int height) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.options.hideGui) return;
         if (mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.SPECTATOR) return;
 
-        float partialTicks = deltaTracker.getGameTimeDeltaPartialTick(false);
         int promptSize = (int) displayedPromptSize.getValue(partialTicks);
         if (promptSize <= 1) return;
 

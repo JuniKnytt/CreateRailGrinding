@@ -7,7 +7,6 @@
     "LivingEntityFallFlyingMixin",
     "PlayerEdgeMixin",
     "PlayerNoPhysicsTickMixin",
-    "PortalProcessorInstantMixin",
     "ServerMovePacketMixin"
   ],
   "client": [

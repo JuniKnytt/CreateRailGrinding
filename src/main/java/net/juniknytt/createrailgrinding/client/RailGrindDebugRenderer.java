@@ -12,12 +12,12 @@ import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.RenderLevelStageEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 
-@EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
+@Mod.EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
 public final class RailGrindDebugRenderer {
 
     private static final double HALF_W = RailGrindHandler.SNAP_BOX_HALF_W;

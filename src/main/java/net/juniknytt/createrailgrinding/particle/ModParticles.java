@@ -3,16 +3,16 @@ package net.juniknytt.createrailgrinding.particle;
 import net.juniknytt.createrailgrinding.RailGrind;
 import net.minecraft.core.particles.ParticleType;
 import net.minecraft.core.particles.SimpleParticleType;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.neoforge.registries.DeferredHolder;
-import net.neoforged.neoforge.registries.DeferredRegister;
+import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.registries.DeferredRegister;
+import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.registries.RegistryObject;
 
 public final class ModParticles {
     public static final DeferredRegister<ParticleType<?>> PARTICLE_TYPES =
-        DeferredRegister.create(BuiltInRegistries.PARTICLE_TYPE, RailGrind.MODID);
+        DeferredRegister.create(ForgeRegistries.PARTICLE_TYPES, RailGrind.MODID);
 
-    public static final DeferredHolder<ParticleType<?>, SimpleParticleType> SPARK =
+    public static final RegistryObject<SimpleParticleType> SPARK =
         PARTICLE_TYPES.register("spark", () -> new SimpleParticleType(false));
 
     private ModParticles() {}

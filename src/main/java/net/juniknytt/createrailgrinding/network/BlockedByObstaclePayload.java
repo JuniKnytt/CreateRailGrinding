@@ -1,19 +1,13 @@
 package net.juniknytt.createrailgrinding.network;
 
-import io.netty.buffer.ByteBuf;
-import net.juniknytt.createrailgrinding.RailGrind;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.network.FriendlyByteBuf;
 
-public record BlockedByObstaclePayload() implements CustomPacketPayload {
+public record BlockedByObstaclePayload() {
     public static final BlockedByObstaclePayload INSTANCE = new BlockedByObstaclePayload();
 
-    public static final Type<BlockedByObstaclePayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "blocked_by_obstacle"));
+    public void encode(FriendlyByteBuf buf) {}
 
-    public static final StreamCodec<ByteBuf, BlockedByObstaclePayload> STREAM_CODEC = StreamCodec.unit(INSTANCE);
-
-    @Override
-    public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    public static BlockedByObstaclePayload decode(FriendlyByteBuf buf) {
+        return INSTANCE;
+    }
 }

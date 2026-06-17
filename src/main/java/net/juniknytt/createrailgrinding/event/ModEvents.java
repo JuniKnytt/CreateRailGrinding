@@ -5,7 +5,6 @@ import net.juniknytt.createrailgrinding.RailGrind;
 import net.juniknytt.createrailgrinding.advancement.ModTriggers;
 import net.juniknytt.createrailgrinding.cosmetic.CustomBootSkin;
 import net.juniknytt.createrailgrinding.effect.ModEffects;
-import net.juniknytt.createrailgrinding.enchantment.ModEnchantments;
 import net.juniknytt.createrailgrinding.rail.RailGrindHandler;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -16,22 +15,23 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.bus.api.EventPriority;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.entity.EntityTeleportEvent;
-import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
-import net.neoforged.neoforge.event.entity.living.LivingEquipmentChangeEvent;
-import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
-import net.neoforged.neoforge.event.entity.player.PlayerEvent;
-import net.neoforged.neoforge.event.tick.PlayerTickEvent;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.EntityTeleportEvent;
+import net.minecraftforge.event.entity.living.LivingEntityUseItemEvent;
+import net.minecraftforge.event.entity.living.LivingEquipmentChangeEvent;
+import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 
-@EventBusSubscriber(modid = RailGrind.MODID)
+@Mod.EventBusSubscriber(modid = RailGrind.MODID)
 public class ModEvents
 {
     @SubscribeEvent
-    public static void onPlayerTick(PlayerTickEvent.Post event) {
-        Player player = event.getEntity();
+    public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
+        Player player = event.player;
         if (player.level().isClientSide) return;
 
         RailGrindHandler.tickCooldown(player);
@@ -49,19 +49,21 @@ public class ModEvents
     }
 
     @SubscribeEvent
-    public static void onPlayerTickGrantBootsAdvancement(PlayerTickEvent.Post event) {
-        if (!(event.getEntity() instanceof ServerPlayer sp)) return;
+    public static void onPlayerTickGrantBootsAdvancement(TickEvent.PlayerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
+        if (!(event.player instanceof ServerPlayer sp)) return;
         if (sp.tickCount % 20 != 0) return;
         if (!hasCustomBoots(sp)) return;
-        ModTriggers.OBTAIN_CUSTOM_BOOTS.get().trigger(sp);
+        ModTriggers.OBTAIN_CUSTOM_BOOTS.trigger(sp);
     }
 
     @SubscribeEvent
-    public static void onPlayerTickGrantEffectAdvancement(PlayerTickEvent.Post event) {
-        if (!(event.getEntity() instanceof ServerPlayer sp)) return;
+    public static void onPlayerTickGrantEffectAdvancement(TickEvent.PlayerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
+        if (!(event.player instanceof ServerPlayer sp)) return;
         if (!RailGrindHandler.isGrinding(sp)) return;
-        if (!sp.hasEffect(ModEffects.SONIC_WIND)) return;
-        ModTriggers.RAIL_GRIND_EFFECT.get().trigger(sp);
+        if (!sp.hasEffect(ModEffects.SONIC_WIND.get())) return;
+        ModTriggers.RAIL_GRIND_EFFECT.trigger(sp);
     }
 
     private static boolean hasCustomBoots(ServerPlayer sp) {
@@ -73,7 +75,7 @@ public class ModEvents
     }
 
     @SubscribeEvent
-    public static void onIncomingDamage(LivingIncomingDamageEvent event) {
+    public static void onIncomingDamage(LivingHurtEvent event) {
         if (!(event.getEntity() instanceof Player player)) return;
 
         if (RailGrindHandler.isInReattachGrace(player)) {
@@ -87,7 +89,7 @@ public class ModEvents
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
-    public static void onIncomingDamageStopGrind(LivingIncomingDamageEvent event) {
+    public static void onIncomingDamageStopGrind(LivingHurtEvent event) {
         if (event.isCanceled()) return;
         if (!(event.getEntity() instanceof Player player)) return;
         if (player.level().isClientSide) return;
@@ -153,7 +155,7 @@ public class ModEvents
         player.fallDistance = 0.0F;
     }
 
-    private static final ResourceLocation BAR_OF_CHOCOLATE = ResourceLocation.fromNamespaceAndPath("create", "bar_of_chocolate");
+    private static final ResourceLocation BAR_OF_CHOCOLATE = new ResourceLocation("create", "bar_of_chocolate");
 
     @SubscribeEvent
     public static void onItemUseFinish(LivingEntityUseItemEvent.Finish event) {
@@ -164,7 +166,7 @@ public class ModEvents
         ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
         if (!BAR_OF_CHOCOLATE.equals(id)) return;
         player.addEffect(new MobEffectInstance(
-                ModEffects.SONIC_WIND,
+                ModEffects.SONIC_WIND.get(),
                 ModEffects.SONIC_WIND_DURATION_TICKS,
                 0,
                 false,

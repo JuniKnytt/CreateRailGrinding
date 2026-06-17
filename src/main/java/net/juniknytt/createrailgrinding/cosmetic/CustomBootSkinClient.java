@@ -17,21 +17,21 @@ import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ModelEvent;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.ModelEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.Map;
 
-@EventBusSubscriber(modid = RailGrind.MODID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+@Mod.EventBusSubscriber(modid = RailGrind.MODID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public final class CustomBootSkinClient {
     private CustomBootSkinClient() {}
 
-    private static final ModelResourceLocation CUSTOM_MODEL = ModelResourceLocation.standalone(
-            ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "item/custom_diving_boots"));
+    private static final ModelResourceLocation CUSTOM_MODEL = new ModelResourceLocation(
+            new ResourceLocation(RailGrind.MODID, "custom_diving_boots"), "inventory");
 
     @SubscribeEvent
     public static void onRegisterAdditional(ModelEvent.RegisterAdditional event) {
@@ -40,7 +40,7 @@ public final class CustomBootSkinClient {
 
     @SubscribeEvent
     public static void onModifyBakingResult(ModelEvent.ModifyBakingResult event) {
-        Map<ModelResourceLocation, BakedModel> models = event.getModels();
+        Map<ResourceLocation, BakedModel> models = event.getModels();
         BakedModel custom = models.get(CUSTOM_MODEL);
         if (custom == null) {
             RailGrind.LOGGER.warn("CustomBootSkin: standalone model not baked, skin swap disabled");
@@ -51,7 +51,7 @@ public final class CustomBootSkinClient {
             if (armor.getType() != ArmorItem.Type.BOOTS) continue;
             ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
             if (itemId == null) continue;
-            ModelResourceLocation modelKey = ModelResourceLocation.inventory(itemId);
+            ModelResourceLocation modelKey = new ModelResourceLocation(itemId, "inventory");
             BakedModel original = models.get(modelKey);
             if (original == null) continue;
             models.put(modelKey, new DelegatingBakedModel(original, custom));

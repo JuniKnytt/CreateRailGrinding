@@ -9,9 +9,7 @@ import com.simibubi.create.content.trains.track.TrackBlockOutline;
 import com.simibubi.create.content.trains.track.TrackBlockOutline.BezierPointSelection;
 import net.juniknytt.createrailgrinding.RailGrind;
 import net.juniknytt.createrailgrinding.client.BalancingPoseTracker;
-import net.juniknytt.createrailgrinding.compat.Mods;
 import net.juniknytt.createrailgrinding.enchantment.ModEnchantments;
-import net.juniknytt.createrailgrinding.compat.SableSubLevels;
 import net.juniknytt.createrailgrinding.network.ChainMountedPayload;
 import net.juniknytt.createrailgrinding.network.CrossDimGraceReleasePayload;
 import net.juniknytt.createrailgrinding.network.GrindAccelInputPayload;
@@ -31,30 +29,28 @@ import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.EventPriority;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.client.event.InputEvent;
-import net.neoforged.neoforge.client.event.MovementInputUpdateEvent;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.client.event.InputEvent;
+import net.minecraftforge.client.event.MovementInputUpdateEvent;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
+import net.juniknytt.createrailgrinding.network.ModNetworking;
 
-@EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
+@Mod.EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
 public class ClientInputHandler {
 
     public record LastRightClickInfo(
@@ -69,8 +65,6 @@ public class ClientInputHandler {
 
     public static volatile @Nullable LastRightClickInfo lastRightClickInfo = null;
 
-    private static final double SUBLEVEL_PROBE_RADIUS = 8.0;
-
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onClickInput(InputEvent.InteractionKeyMappingTriggered event) {
         if (!event.isUseItem()) return;
@@ -84,25 +78,6 @@ public class ClientInputHandler {
 
         if (player.isPassenger()) return;
 
-        boolean isSubLevelContext = Mods.SABLE.runIfInstalled(() -> () ->
-                !SableSubLevels.sublevelsNear(player.level(), player.getEyePosition(), SUBLEVEL_PROBE_RADIUS).isEmpty()
-        ).orElse(false);
-        if (isSubLevelContext) {
-
-            String detection = detectStandardRailUnderClick(mc, player);
-
-            if (detection == null && hasSubLevelCurveAtCrosshair(mc, player)) {
-                detection = "sublevel curve segment";
-            }
-            updateRightClickDebug(mc, player, detection == null ? "<none, sublevel>" : "sublevel: " + detection);
-            if (detection != null && ModEnchantments.isWearingRailGrindBoots(player)) {
-                PacketDistributor.sendToServer(StartGrindFromNearestPayload.INSTANCE);
-                player.swing(InteractionHand.MAIN_HAND);
-                event.setCanceled(true);
-            }
-            return;
-        }
-
         Vec3 interactionEnd = computeInteractionEnd(mc, player);
         if (interactionEnd == null) {
             updateRightClickDebug(mc, player, "<none>");
@@ -112,7 +87,7 @@ public class ClientInputHandler {
 
         if (!ModEnchantments.isWearingRailGrindBoots(player)) return;
 
-        PacketDistributor.sendToServer(new Networking.TeleportToRailPacket(interactionEnd));
+        ModNetworking.toServer(new Networking.TeleportToRailPacket(interactionEnd));
         player.swing(InteractionHand.MAIN_HAND);
         event.setCanceled(true);
     }
@@ -129,7 +104,7 @@ public class ClientInputHandler {
         }
 
         Vec3 eye = player.getEyePosition();
-        double range = Math.max(player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE), GRIND_START_CURVE_REACH);
+        double range = Math.max(player.getBlockReach(), GRIND_START_CURVE_REACH);
         Vec3 target = eye.add(player.getViewVector(1.0F).scale(range));
         Vec3 ours = RailGrindHandler.pickGrindableCurvePointOnRay(player.level(), eye, target, CURVE_PICK_MAX_DIST_SQ);
         if (ours != null) return ours;
@@ -145,108 +120,6 @@ public class ClientInputHandler {
     private static final double CURVE_PICK_MAX_DIST_SQ = 0.25;
     private static final double GRIND_START_CURVE_REACH = 8.0;
     private static final double GRIND_START_MAX_TELEPORT_DIST_SQ = 100.0;
-
-    private static boolean hasSubLevelCurveAtCrosshair(Minecraft mc, LocalPlayer player) {
-        if (!Mods.SABLE.isLoaded()) return false;
-        Vec3 worldEye = player.getEyePosition();
-        Vec3 worldLook = player.getViewVector(1.0F);
-        double range = player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE);
-        if (mc.hitResult != null && mc.hitResult.getType() != HitResult.Type.MISS) {
-            range = Math.min(range, worldEye.distanceTo(mc.hitResult.getLocation()));
-        }
-        Vec3 worldTarget = worldEye.add(worldLook.scale(range));
-        return Mods.SABLE.runIfInstalled(() -> () -> {
-            for (SableSubLevels.SubLevelHandle handle : SableSubLevels.sublevelsNear(player.level(), worldEye, SUBLEVEL_PROBE_RADIUS)) {
-                Level sl = handle.getLevel();
-                if (sl == null) continue;
-                Vec3 localEye = handle.toLocal(worldEye);
-                Vec3 localTarget = handle.toLocal(worldTarget);
-                if (curveOnRayInLevel(sl, localEye, localTarget)) return Boolean.TRUE;
-            }
-            return Boolean.FALSE;
-        }).orElse(Boolean.FALSE);
-    }
-
-    private static boolean curveOnRayInLevel(Level level, Vec3 eye, Vec3 target) {
-        BlockPos centerBlock = BlockPos.containing(eye);
-        int chunkX = SectionPos.blockToSectionCoord(centerBlock.getX());
-        int chunkZ = SectionPos.blockToSectionCoord(centerBlock.getZ());
-        for (int cx = -1; cx <= 1; cx++) {
-            for (int cz = -1; cz <= 1; cz++) {
-                ChunkAccess chunk = level.getChunk(chunkX + cx, chunkZ + cz, ChunkStatus.FULL, false);
-                if (chunk == null) continue;
-                for (BlockPos bePos : chunk.getBlockEntitiesPos()) {
-                    BlockEntity be = level.getBlockEntity(bePos);
-                    if (!(be instanceof TrackBlockEntity tbe)) continue;
-                    for (BezierConnection conn : tbe.getConnections().values()) {
-                        AABB bounds = conn.getBounds();
-                        if (!bounds.contains(eye) && bounds.clip(eye, target).isEmpty()) continue;
-                        int segCount = conn.getSegmentCount();
-                        for (int seg = 0; seg < segCount; seg++) {
-                            float t = conn.getSegmentT(seg);
-                            Vec3 p = conn.getPosition(t);
-                            if (distancePointToSegmentSq(p, eye, target) < CURVE_PICK_MAX_DIST_SQ) {
-                                return true;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    private static double distancePointToSegmentSq(Vec3 p, Vec3 a, Vec3 b) {
-        Vec3 ab = b.subtract(a);
-        double abLenSq = ab.lengthSqr();
-        if (abLenSq < 1.0e-9) return p.distanceToSqr(a);
-        Vec3 ap = p.subtract(a);
-        double t = Math.max(0.0, Math.min(1.0, ap.dot(ab) / abLenSq));
-        Vec3 proj = a.add(ab.scale(t));
-        return p.distanceToSqr(proj);
-    }
-
-    @Nullable
-    private static String detectStandardRailUnderClick(Minecraft mc, LocalPlayer player) {
-        if (!(mc.hitResult instanceof BlockHitResult bhr) || bhr.getType() != HitResult.Type.BLOCK) {
-            return null;
-        }
-        BlockPos hitPos = bhr.getBlockPos();
-        Vec3 hitVec = bhr.getLocation();
-        Level world = player.level();
-
-        String parent = railAtOrBelow(world, hitPos, "parent @ hitPos");
-        if (parent != null) return parent;
-
-        return Mods.SABLE.runIfInstalled(() -> () -> {
-            int idx = 0;
-            for (SableSubLevels.SubLevelHandle h : SableSubLevels.sublevelsNear(world, player.getEyePosition(), SUBLEVEL_PROBE_RADIUS)) {
-                idx++;
-                Level sl = h.getLevel();
-                if (sl == null) continue;
-                String tag = "sublevel#" + idx;
-
-                String r;
-                if ((r = railAtOrBelow(sl, hitPos, tag + " @ hitPos (as-is)")) != null) return r;
-                if ((r = railAtOrBelow(sl, BlockPos.containing(h.toLocal(hitVec)), tag + " @ toLocal(hitVec)")) != null) return r;
-                if ((r = railAtOrBelow(sl, BlockPos.containing(h.toLocal(hitPos.getCenter())), tag + " @ toLocal(hitPos.center)")) != null) return r;
-            }
-            return null;
-        }).orElse(null);
-    }
-
-    @Nullable
-    private static String railAtOrBelow(Level level, BlockPos pos, String tag) {
-        if (isStandardRailAt(level, pos)) return tag;
-        if (isStandardRailAt(level, pos.below())) return tag + ".below";
-        return null;
-    }
-
-    private static boolean isStandardRailAt(Level level, BlockPos pos) {
-        BlockState s = level.getBlockState(pos);
-        return s.getBlock() instanceof ITrackBlock t
-                && RailGrindHandler.isGrindableMaterial(t.getMaterial());
-    }
 
     private static void updateRightClickDebug(Minecraft mc, LocalPlayer player, String detectionSource) {
         BlockPos hitPos = null;
@@ -288,7 +161,8 @@ public class ClientInputHandler {
     private static boolean prevJumpInput = false;
 
     @SubscribeEvent
-    public static void onJumpEdgeTick(ClientTickEvent.Post event) {
+    public static void onJumpEdgeTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null) {
@@ -314,7 +188,7 @@ public class ClientInputHandler {
             int held = getChargeHeldTicks();
             chargeStartGameTime = -1L;
 
-            PacketDistributor.sendToServer(new StopGrindPayload(Math.max(0, held)));
+            ModNetworking.toServer(new StopGrindPayload(Math.max(0, held)));
             mc.gui.setOverlayMessage(Component.translatable(
                     "createrailgrinding.catch_prompt",
                     ModKeyMappings.CATCH.getTranslatedKeyMessage()), false);
@@ -322,7 +196,8 @@ public class ClientInputHandler {
     }
 
     @SubscribeEvent
-    public static void onClientTickResetCharge(ClientTickEvent.Post event) {
+    public static void onClientTickResetCharge(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
         if (chargeStartGameTime < 0L) return;
         LocalPlayer player = Minecraft.getInstance().player;
         if (player == null
@@ -334,7 +209,8 @@ public class ClientInputHandler {
     }
 
     @SubscribeEvent
-    public static void onClientTick(ClientTickEvent.Post event) {
+    public static void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen != null) return;
         LocalPlayer player = mc.player;
@@ -344,7 +220,7 @@ public class ClientInputHandler {
         if (player.isPassenger()) return;
         if (!isMountInputHeld(player)) return;
         if (!ModEnchantments.isWearingRailGrindBoots(player)) return;
-        PacketDistributor.sendToServer(StartGrindFromNearestPayload.INSTANCE);
+        ModNetworking.toServer(StartGrindFromNearestPayload.INSTANCE);
     }
 
     private static boolean isMountInputHeld(LocalPlayer player) {
@@ -411,7 +287,8 @@ public class ClientInputHandler {
     }
 
     @SubscribeEvent
-    public static void onChainMountTick(ClientTickEvent.Post event) {
+    public static void onChainMountTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
         LocalPlayer player = Minecraft.getInstance().player;
         if (player == null) {
             lastChainMounted = false;
@@ -419,13 +296,14 @@ public class ClientInputHandler {
         }
         boolean mounted = ChainConveyorRidingHandler.ridingChainConveyor != null;
         if (mounted && !lastChainMounted && BalancingPoseTracker.isBalancing(player)) {
-            PacketDistributor.sendToServer(ChainMountedPayload.INSTANCE);
+            ModNetworking.toServer(ChainMountedPayload.INSTANCE);
         }
         lastChainMounted = mounted;
     }
 
     @SubscribeEvent
-    public static void onCrossDimGraceAckTick(ClientTickEvent.Post event) {
+    public static void onCrossDimGraceAckTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
         if (!pendingCrossDimGraceAck) return;
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
@@ -439,12 +317,13 @@ public class ClientInputHandler {
         if (mc.screen instanceof ReceivingLevelScreen) return;
         if (!mc.level.isLoaded(player.blockPosition())) return;
 
-        PacketDistributor.sendToServer(CrossDimGraceReleasePayload.INSTANCE);
+        ModNetworking.toServer(CrossDimGraceReleasePayload.INSTANCE);
         pendingCrossDimGraceAck = false;
     }
 
     @SubscribeEvent
-    public static void onSteerTick(ClientTickEvent.Post event) {
+    public static void onSteerTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         int steer = 0;
@@ -458,12 +337,13 @@ public class ClientInputHandler {
         }
         if (steer == lastSentSteer) return;
 
-        if (player != null) PacketDistributor.sendToServer(new SteerInputPayload((byte) steer));
+        if (player != null) ModNetworking.toServer(new SteerInputPayload((byte) steer));
         lastSentSteer = steer;
     }
 
     @SubscribeEvent
-    public static void onAccelInputTick(ClientTickEvent.Post event) {
+    public static void onAccelInputTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null) return;
@@ -480,7 +360,7 @@ public class ClientInputHandler {
 
         byte mode = held ? GrindAccelInputPayload.OVERRIDE_ON : GrindAccelInputPayload.OVERRIDE_OFF;
         if (mode == lastSentAccelMode) return;
-        PacketDistributor.sendToServer(new GrindAccelInputPayload(mode));
+        ModNetworking.toServer(new GrindAccelInputPayload(mode));
         lastSentAccelMode = mode;
     }
 

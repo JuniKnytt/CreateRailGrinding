@@ -14,8 +14,7 @@
       "translate": "advancement.createrailgrinding.railgrind_effect_advancement.desc"
     },
     "icon": {
-      "count": 1,
-      "id": "create:bar_of_chocolate"
+      "item": "create:bar_of_chocolate"
     },
     "title": {
       "translate": "advancement.createrailgrinding.railgrind_effect_advancement"

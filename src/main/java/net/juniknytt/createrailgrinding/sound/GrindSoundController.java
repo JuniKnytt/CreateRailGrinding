@@ -11,16 +11,16 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.tick.PlayerTickEvent;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-@EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
+@Mod.EventBusSubscriber(modid = RailGrind.MODID, value = Dist.CLIENT)
 public final class GrindSoundController {
     private static double maxSpeed()      { return Config.TOP_GRIND_SPEED.get(); }
     private static double slowRampEnd()   { return maxSpeed() * 0.50; }
@@ -55,8 +55,9 @@ public final class GrindSoundController {
     }
 
     @SubscribeEvent
-    public static void onClientPlayerTick(PlayerTickEvent.Post event) {
-        Player player = event.getEntity();
+    public static void onClientPlayerTick(TickEvent.PlayerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
+        Player player = event.player;
 
         if (!player.level().isClientSide()) return;
 

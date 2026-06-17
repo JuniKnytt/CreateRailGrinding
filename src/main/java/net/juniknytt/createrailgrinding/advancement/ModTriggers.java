@@ -1,31 +1,22 @@
 package net.juniknytt.createrailgrinding.advancement;
 
-import net.juniknytt.createrailgrinding.RailGrind;
-import net.minecraft.advancements.CriterionTrigger;
-import net.minecraft.core.registries.Registries;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.neoforge.registries.DeferredHolder;
-import net.neoforged.neoforge.registries.DeferredRegister;
+import net.minecraft.advancements.CriteriaTriggers;
 
 public final class ModTriggers {
-    public static final DeferredRegister<CriterionTrigger<?>> TRIGGERS =
-            DeferredRegister.create(Registries.TRIGGER_TYPE, RailGrind.MODID);
+    public static RailGrindTrigger RAIL_GRIND;
 
-    public static final DeferredHolder<CriterionTrigger<?>, RailGrindTrigger> RAIL_GRIND =
-            TRIGGERS.register("rail_grind", RailGrindTrigger::new);
+    public static CustomBootsTrigger OBTAIN_CUSTOM_BOOTS;
 
-    public static final DeferredHolder<CriterionTrigger<?>, CustomBootsTrigger> OBTAIN_CUSTOM_BOOTS =
-            TRIGGERS.register("obtain_custom_boots", CustomBootsTrigger::new);
+    public static FallNegateTrigger FALLDAMAGE_NEGATE;
 
-    public static final DeferredHolder<CriterionTrigger<?>, FallNegateTrigger> FALLDAMAGE_NEGATE =
-            TRIGGERS.register("falldamage_negate", FallNegateTrigger::new);
-
-    public static final DeferredHolder<CriterionTrigger<?>, RailGrindEffectTrigger> RAIL_GRIND_EFFECT =
-            TRIGGERS.register("railgrind_effect", RailGrindEffectTrigger::new);
+    public static RailGrindEffectTrigger RAIL_GRIND_EFFECT;
 
     private ModTriggers() {}
 
-    public static void register(IEventBus modBus) {
-        TRIGGERS.register(modBus);
+    public static void register() {
+        RAIL_GRIND = CriteriaTriggers.register(new RailGrindTrigger());
+        OBTAIN_CUSTOM_BOOTS = CriteriaTriggers.register(new CustomBootsTrigger());
+        FALLDAMAGE_NEGATE = CriteriaTriggers.register(new FallNegateTrigger());
+        RAIL_GRIND_EFFECT = CriteriaTriggers.register(new RailGrindEffectTrigger());
     }
 }
