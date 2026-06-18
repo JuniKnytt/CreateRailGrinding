@@ -23,7 +23,7 @@ public abstract class CameraLeanMixin {
     private static final float LEAN_EPSILON = 1e-4f;
 
     @Shadow
-    protected abstract void move(float zoom, float dy, float dx);
+    protected abstract void move(double zoom, double dy, double dx);
 
     @Inject(
         method = "setup(Lnet/minecraft/world/level/BlockGetter;Lnet/minecraft/world/entity/Entity;ZZF)V",

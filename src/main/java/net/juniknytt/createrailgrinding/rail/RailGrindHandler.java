@@ -1482,7 +1482,7 @@ public final class RailGrindHandler {
         FluidType waterType = ForgeMod.WATER_TYPE.get();
         FluidType lavaType = ForgeMod.LAVA_TYPE.get();
         double slowest = 1.0;
-        for (FluidType type : ForgeRegistries.FLUID_TYPES) {
+        for (FluidType type : ForgeRegistries.FLUID_TYPES.get()) {
             if (!player.isInFluidType(type)) continue;
             double factor;
             if (type == waterType) {
