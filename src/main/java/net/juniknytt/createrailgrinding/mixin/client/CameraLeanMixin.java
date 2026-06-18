@@ -39,6 +39,6 @@ public abstract class CameraLeanMixin {
         if (!BalancingPoseTracker.isBalancing(player)) return;
         float lean = RailGrindLeanTracker.getRenderLean(player, partialTick);
         if (Math.abs(lean) < LEAN_EPSILON) return;
-        this.move(0.0f, -LEAN_DOWN * Math.abs(lean), LEAN_LATERAL * lean);
+        this.move(0.0f, -LEAN_DOWN * Math.abs(lean), -LEAN_LATERAL * lean);
     }
 }
