@@ -15,6 +15,10 @@ group = mod_group_id
 repositories {
     maven { url = "https://maven.createmod.net" } // Create, Ponder, Flywheel
     maven { url = "https://maven.ithundxr.dev/snapshots" } // Registrate
+    maven {
+        url = "https://api.modrinth.com/maven" // EMF/ETF (optional compat)
+        content { includeGroup "maven.modrinth" }
+    }
 }
 
 base {
@@ -83,6 +87,9 @@ dependencies {
     compileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-${minecraft_version}:${flywheel_version}")
     runtimeOnly("dev.engine-room.flywheel:flywheel-neoforge-${minecraft_version}:${flywheel_version}")
     implementation("com.tterrag.registrate:Registrate:${registrate_version}")
+
+    compileOnly("maven.modrinth:entity-model-features:${emf_version}")
+    compileOnly("maven.modrinth:entitytexturefeatures:${etf_version}")
 }
 
 

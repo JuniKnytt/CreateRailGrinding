@@ -73,4 +73,14 @@ config="${mod_id}.mixins.json"
     ordering="AFTER"
     side="BOTH"
 
+# Entity Model Features (client-only). Optional — when present, our compat forces EMF to
+# yield to the vanilla player model while a player is rail-grinding so the grind pose renders.
+# Gated at runtime by Mods.EMF.isLoaded(); the mod runs identically without EMF installed.
+[[dependencies.${mod_id}]]
+    modId="entity_model_features"
+    type="optional"
+    versionRange="[3.2.4,)"
+    ordering="AFTER"
+    side="CLIENT"
+
 

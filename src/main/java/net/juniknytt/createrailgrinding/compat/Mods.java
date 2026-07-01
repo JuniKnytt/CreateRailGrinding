@@ -7,7 +7,8 @@ import java.util.function.Supplier;
 import net.neoforged.fml.loading.LoadingModList;
 
 public enum Mods {
-    SABLE;
+    SABLE,
+    EMF("entity_model_features");
 
     private final String id;
     private final boolean isLoaded;
@@ -15,6 +16,13 @@ public enum Mods {
     Mods() {
 
         this.id = name().toLowerCase(Locale.ROOT);
+
+        this.isLoaded = LoadingModList.get().getModFileById(this.id) != null;
+    }
+
+    Mods(String explicitId) {
+
+        this.id = explicitId;
 
         this.isLoaded = LoadingModList.get().getModFileById(this.id) != null;
     }
