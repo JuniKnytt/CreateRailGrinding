@@ -1,0 +1,46 @@
+{
+  "createrailgrinding.dismount_prompt": "Нажмите %1$s, чтобы слезть",
+  "createrailgrinding.catch_prompt": "Зажмите %1$s, чтобы зацепиться за рельсы",
+  "key.categories.createrailgrinding": "Скольжение по рельсам",
+  "key.createrailgrinding.catch": "Зацепиться за рельсы",
+  "key.createrailgrinding.grind_jump": "Прыжок с рельсов",
+  "key.createrailgrinding.grind_crouch": "Присесть (Ускорение на рельсах)",
+  "effect.createrailgrinding.railgrindboost": "Звуковой порыв",
+  "effect.createrailgrinding.railgrindboost.description": "Мотивирующее сладкое лакомство, которое _Улучшает_ ваши _Навыки скольжения по рельсам._",
+  "effect.createrailgrinding.railgrindboost.condition": "При съедании",
+  "effect.createrailgrinding.railgrindboost.behaviour": "Дарует _Звуковой_ _порыв_, увеличивающий _скорость_, _ускорение_ и _силу прыжка_ во время _скольжения по рельсам_.",
+
+  "item.createrailgrinding.diving_boots.tooltip.condition1": "Рядом с рельсами",
+  "item.createrailgrinding.diving_boots.tooltip.behaviour1": "Дарует возможность _скользить_ по рельсам _Железнодорожных путей._ _Взаимодействуйте (ПКМ)_ с _Железнодорожными путями_ пустой рукой или удерживайте _%1$s_, находясь рядом с ними.",
+  "item.createrailgrinding.diving_boots.tooltip.condition2": "Во время скольжения по рельсам",
+  "item.createrailgrinding.diving_boots.tooltip.behaviour2": "Зажмите _%1$s_ для ускорения. Зажмите _%2$s_, чтобы спрыгнуть с рельсов. _Взаимодействуйте (ПКМ)_ с _Железнодорожными путями_, чтобы остановиться.",
+
+  "enchantment.createrailgrinding.railgrind_enchantment": "Рельсовый наездник",
+  "enchantment.createrailgrinding.railgrind_enchantment.desc": "Позволяет скользить по рельсам Железнодорожных путей",
+
+  "advancement.createrailgrinding.railgrind_advancement": "Экстремальное снаряжение",
+  "advancement.createrailgrinding.railgrind_advancement.desc": "Катайтесь по рельсам Железнодорожных путей с помощью Водолазных ботинок или чар «Рельсовый наездник»",
+
+  "advancement.createrailgrinding.railgrind_effect_advancement": "Со сверхзвуковой скоростью",
+  "advancement.createrailgrinding.railgrind_effect_advancement.desc": "Ускорьте своё скольжение по рельсам, съев шоколад",
+
+  "advancement.createrailgrinding.custom_boots_advancement": "Мчусь со скоростью звука",
+  "advancement.createrailgrinding.custom_boots_advancement.desc": "Получите ботинки для скольжения по рельсам с обличьем известного спидстера",
+
+  "advancement.createrailgrinding.falldamage_negate_advancement": "Вот тебе и бюджетные авиалинии",
+  "advancement.createrailgrinding.falldamage_negate_advancement.desc": "Спаситесь от смертельного падения, вовремя зацепившись за рельсы",
+
+  "subtitles.createrailgrinding.grind_collide": "Лязг",
+  "subtitles.createrailgrinding.grind_slow_loop": "Качение",
+  "subtitles.createrailgrinding.grind_fast_loop": "Скольжение",
+
+  "createrailgrinding.ponder.rail_grinding_intro.header": "Скольжение по рельсам",
+  "createrailgrinding.ponder.rail_grinding_intro.text_1": "Водолазные ботинки отлично подходят в качестве обуви для скольжения по рельсам",
+  "createrailgrinding.ponder.rail_grinding_intro.text_2": "Нажмите ПКМ по Железнодорожным путям пустой рукой, чтобы начать скольжение",
+  "createrailgrinding.ponder.rail_grinding_intro.text_3": "Нажмите ПКМ по Железнодорожным путям пустой рукой, чтобы закончить скольжение",
+  "createrailgrinding.ponder.rail_grinding_intro.text_4": "Зажмите %1$s, чтобы зацепиться за рельсы",
+  "createrailgrinding.ponder.rail_grinding_intro.text_5": "Зажмите %1$s для ускорения",
+  "createrailgrinding.ponder.rail_grinding_intro.text_6": "Зажмите %1$s, чтобы спрыгнуть с рельсов",
+  "createrailgrinding.ponder.rail_grinding_intro.text_7": "Удержание %1$s позволит автоматически зацепляться за ближайшие рельсы",
+  "createrailgrinding.ponder.rail_grinding_intro.text_8": "При зацеплении за рельсы урон от падения отменяется, а импульс движения сохраняется"
+}
