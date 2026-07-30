@@ -16,7 +16,7 @@ import net.neoforged.neoforge.client.extensions.common.RegisterClientExtensionsE
 public final class SonicWindClientExtensions implements IClientMobEffectExtensions {
 
     private static final ResourceLocation EFFECT_TEXTURE =
-            ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "textures/mob_effect/effect.png");
+            ResourceLocation.fromNamespaceAndPath(RailGrind.MODID, "textures/mob_effect/railgrindboost.png");
     private static final int ICON_SIZE = 18;
 
     @Override

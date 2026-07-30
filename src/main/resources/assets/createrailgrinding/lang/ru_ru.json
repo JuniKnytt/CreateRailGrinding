@@ -6,7 +6,8 @@
   "key.createrailgrinding.grind_jump": "Прыжок с рельсов",
   "key.createrailgrinding.grind_crouch": "Присесть (Ускорение на рельсах)",
   "effect.createrailgrinding.railgrindboost": "Звуковой порыв",
-  "effect.createrailgrinding.railgrindboost.description": "Мотивирующее сладкое лакомство, которое _Улучшает_ ваши _Навыки скольжения по рельсам._",
+  "effect.createrailgrinding.railgrindboost.description": "Повышает подвижность во время скольжения по рельсам",
+  "effect.createrailgrinding.railgrindboost.summary": "Мотивирующее сладкое лакомство, которое _Улучшает_ ваши _Навыки скольжения по рельсам._",
   "effect.createrailgrinding.railgrindboost.condition": "При съедании",
   "effect.createrailgrinding.railgrindboost.behaviour": "Дарует _Звуковой_ _порыв_, увеличивающий _скорость_, _ускорение_ и _силу прыжка_ во время _скольжения по рельсам_.",
 

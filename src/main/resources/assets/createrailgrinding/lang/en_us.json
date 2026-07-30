@@ -6,7 +6,8 @@
     "key.createrailgrinding.grind_jump": "Jump Off Rail",
     "key.createrailgrinding.grind_crouch": "Crouch (Accelerate on Rail)",
     "effect.createrailgrinding.railgrindboost": "Sonic Wind",
-    "effect.createrailgrinding.railgrindboost.description": "A motivating sugary treat that _Boosts_ your _Rail Grinding Skills._",
+    "effect.createrailgrinding.railgrindboost.description": "Increases mobility while rail grinding",
+    "effect.createrailgrinding.railgrindboost.summary": "A motivating sugary treat that _Boosts_ your _Rail Grinding Skills._",
     "effect.createrailgrinding.railgrindboost.condition": "When Eaten",
     "effect.createrailgrinding.railgrindboost.behaviour": "Grants _Sonic_ _Wind_, boosting _speed_, _acceleration_, and _jump strength_, while _rail grinding_.",
 

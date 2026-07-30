@@ -19,7 +19,7 @@ import net.neoforged.neoforge.event.entity.player.ItemTooltipEvent;
 public final class BarOfChocolateTooltip {
     private static final ResourceLocation BAR_OF_CHOCOLATE =
             ResourceLocation.fromNamespaceAndPath("create", "bar_of_chocolate");
-    private static final String SUMMARY_KEY = "effect.createrailgrinding.railgrindboost.description";
+    private static final String SUMMARY_KEY = "effect.createrailgrinding.railgrindboost.summary";
     private static final String CONDITION_KEY = "effect.createrailgrinding.railgrindboost.condition";
     private static final String BEHAVIOUR_KEY = "effect.createrailgrinding.railgrindboost.behaviour";
     private static final String HOLD_FOR_DESCRIPTION_KEY = "create.tooltip.holdForDescription";

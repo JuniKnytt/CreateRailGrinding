@@ -6,7 +6,8 @@
     "key.createrailgrinding.grind_jump": "Зістрибнути з рейки",
     "key.createrailgrinding.grind_crouch": "Нахилитись (прискоритись на рейці)",
     "effect.createrailgrinding.railgrindboost": "Понадзвуковий вітер",
-    "effect.createrailgrinding.railgrindboost.description": "Мотиваційні солодкі ласощі _підвищують_ ваші _ навички ковзання по рейках._",
+    "effect.createrailgrinding.railgrindboost.description": "Підвищує рухливість під час ковзання по рейках",
+    "effect.createrailgrinding.railgrindboost.summary": "Мотиваційні солодкі ласощі _підвищують_ ваші _ навички ковзання по рейках._",
     "effect.createrailgrinding.railgrindboost.condition": "При споживанні",
     "effect.createrailgrinding.railgrindboost.behaviour": "Надає ефект _Понадзвукового вітру_, який збільшує _швидкість_, _прискорення_ та _силу стрибка_ під час _ковзання на рейці_.",
 
